@@ -1,0 +1,2 @@
+time,motor,vbus_V,speeds,Fc_Nm,Fc_pos,Fc_neg,B_Nms,B_pos,B_neg,rms_pos,rms_neg,Fc_model,B_model
+20261105_211813,6512,12.06,"0.5,1,2,4,7,10,14",0.398,0.394,0.4019,-0.00691,-0.00591,-0.00792,0.01,0.0105,0.377,0.09
