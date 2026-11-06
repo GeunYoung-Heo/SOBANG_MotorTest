@@ -198,6 +198,7 @@ python 05_step_response.py --id 99 --motor 5010 --link can --interface virtual -
 06_can_check.py        scan | monitor | latency | move
 07_friction_sweep.py   무부하 마찰: 여러 속도로 돌리며 Iq -> 쿨롱·점성 (추·암 필요 없음)
 08_break_in.py         길들이기: 정·역 번갈아 회전하며 마찰 추이 기록 (누적 시간 관리, 안전 정지)
+09_damping.py          Kd: 목표를 일정 속도로 움직여 피드포워드 없음/있음의 위치 지연 차이로 감쇠 측정 (추·암 없음)
 set_gains.py           RAM에서만 게인 변경 (CAN 시험 전, 원복 안 함, 재부팅하면 원래대로)
 setup_driver.py        드라이버 처음부터 설정 (수업 xdrive_config 순서, 저장함)
 check_wiring.py        배선 바꾼 뒤 상저항(3상)·전원 경로 저항(DC) 확인 (저장 안 함)
