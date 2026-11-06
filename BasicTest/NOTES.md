@@ -1,10 +1,10 @@
 # BasicTest 개발 메모 (XDrive MINI, ODrive fw 0.5.1)
 
 > **작업 절차는 노션 문서를 따릅니다:** [⚙️ 모터 세팅](https://app.notion.com/p/40f9f50be3fc800f87f4f70a8d9c05ec) · [📊 액추에이터 측정 결과](https://app.notion.com/p/40f9f50be3fc81b38370ca54d97d96ea)  
-> 이 파일은 개발하면서 남긴 메모입니다. 일부 내용(예: "오늘 순서"의 예시 ID)은 지난 내용일 수 있습니다.
+> 이 파일은 개발하면서 남긴 메모입니다. 일부 내용(예: "측정 순서"의 예시 ID)은 지난 내용일 수 있습니다.
 
 
-인수 점검 artifact(액추에이터 인수 점검)의 3–8단계를 스크립트로 옮긴 것이다. 시험 스크립트(00–06, set_gains)는
+인수 점검 artifact(액추에이터 인수 점검)의 3–8단계를 스크립트로 옮긴 것이다. 시험 스크립트(00–09, check_wiring, sensor_mode, set_gains)는
 `save_configuration()`을 부르지 않는다. 설정은 RAM에서만 바꾸고, 끝날 때(Ctrl+C 포함) 축을 IDLE로 두고 원래 값으로 되돌린다.
 드라이버 설정을 저장하는 것은 `setup_driver.py` 하나뿐이다.
 
@@ -108,7 +108,10 @@ erase는 `erase`를 직접 입력해야 진행한다. 중간에 멈추면 `--fro
 원본은 왼쪽 다리를 `can0`, 오른쪽 다리를 `can1`의 두 버스로 나눈다. 번호가 겹치지 않으니 한 버스로 묶어도 된다.
 모든 보드의 axis1은 63번으로 두고 heartbeat를 끈다.
 
-## 오늘 순서
+## 측정 순서
+
+액추에이터 모델링 측정은 **08 길들이기 → (몇 시간 식힘) → 07 무부하 마찰 → 09 Kd → 03 강성·부하 마찰** 순서로 한다.
+길들이기 전 마찰은 10–20% 크고, 마찰은 식은 상태에서 가장 먼저 잰다 (2026-11-06 ID03·ID04 결과, 노션 측정 결과 페이지 5절).
 
 `--id`는 데이터 폴더 이름이다. 관절 node ID(예: `01`)를 쓰면 `setup_driver.py` 기록과 같은 폴더에 모인다.
 `--motor`는 6512(고관절·무릎, 큰 모터) 또는 5010(발목). 결과는 `data/ID01/`에 쌓인다.
@@ -120,6 +123,10 @@ erase는 `erase`를 직접 입력해야 진행한다. 중간에 멈추면 `--fro
 | 5 감속비·방향·연속성 | `python 02_units_zero.py --id 01 --motor 6512` | +10°, +90° 왕복 (5 A, 5 turn/s) |
 | 6 강성·부하 마찰 (현재 설정) | `python 03_stiffness.py --id 01 --motor 6512 --gains asis --mass 2.486 --arm 0.1` | 암을 +-6° 자동 왕복 |
 | 6 강성·부하 마찰 (학습 등가) | `python 03_stiffness.py --id 01 --motor 6512 --gains train --mass 2.486 --arm 0.1` | 암을 +-6° 자동 왕복 |
+| 6 큰 부하 (6 Nm 근처) | `python 03_stiffness.py --id 01 --motor 6512 --gains train --mass 6.3 --arm 0.1` | 전류 한계는 기본 10 A 유지, 추 밑에 받침 |
+| 길들이기 | `python 08_break_in.py --id 01 --motor 6512 --minutes 60 --plot` | 출력축 무부하, 정·역 회전 |
+| 무부하 마찰 (식은 상태) | `python 07_friction_sweep.py --id 01 --motor 6512 --plot` | 출력축 무부하, 여러 바퀴 |
+| Kd | `python 09_damping.py --id 01 --motor 6512 --gains train` | 출력축 무부하, 6 Nm 한계로 수십 도 |
 | 7 토크–전류 | `python 04_torque_friction.py torque --id 01 --motor 6512` | 토크 모드, **암 고정 필수** |
 | 7 마찰 | `python 04_torque_friction.py friction --id 01 --motor 6512` | IDLE |
 | 7 백래시 | `python 04_torque_friction.py backlash --id 01 --motor 6512 --gains train` | 위치 유지 |
@@ -127,7 +134,7 @@ erase는 `erase`를 직접 입력해야 진행한다. 중간에 멈추면 `--fro
 | 8 CAN 확인 | `python 06_can_check.py scan` → `latency --node 1` → `move --node 1 --deg 10` | move만 움직임 |
 | 8 스텝 응답 (CAN) | `python set_gains.py --motor 6512 --gains train` 후 `python 05_step_response.py --id 01 --motor 6512 --link can --node 1 --plot` | 스텝 |
 
-각 스크립트는 `-h`로 옵션을 볼 수 있다. 모든 단계를 다 할 필요는 없다. 꼭 할 것은 01, 02, 03이다.
+각 스크립트는 `-h`로 옵션을 볼 수 있다. 모든 단계를 다 할 필요는 없다. 꼭 할 것은 01, 02와 위의 모델링 측정(08 → 07 → 09 → 03)이다.
 
 ### 측정 방법 메모
 
