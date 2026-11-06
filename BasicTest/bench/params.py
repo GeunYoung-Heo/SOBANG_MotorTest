@@ -8,8 +8,8 @@ import math
 GEAR_RATIO = 15.0
 TURN_TO_OUT_DEG = 360.0 / GEAR_RATIO      # 모터 1 turn = 출력 24°
 CAN_BITRATE = 500000                       # 수업 문서 USB-to-CAN Adapter 기준
-CURRENT_LIM = 18.0                         # A, 학습 토크 한계의 근거 (수업 문서 Robot Model v1)
-TEAM_TORQUE_LIMIT = 6.0                    # Nm 관절축, 팀 결정 2026-11-06 (BHL처럼). 전류로는 6 / (kt x 15)
+CURRENT_LIM = 18.0                         # A, 드라이버 전류 한계 (수업 문서 Robot Model v1). 팀 결정 2026-11-06: 그대로 둠
+TEAM_TORQUE_LIMIT = 6.0                    # Nm 관절축, 강화학습 토크 한계 (팀 결정 2026-11-06, BHL처럼). 드라이버는 CURRENT_LIM 유지
 VEL_LIMIT = 50.0                           # turn/s (모터축) = 관절 20.9 rad/s
 POLICY_DT = 0.04                           # 25 Hz
 G = 9.81

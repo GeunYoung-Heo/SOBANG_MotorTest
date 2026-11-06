@@ -132,7 +132,7 @@ def main():
     print(f"  Kd {kd:7.3f} Nm*s/rad   학습 {m['kd']:6.3f}  -> x{kd / m['kd']:.2f}")
     print(f"  감쇠비 {zeta:.2f} (학습 {m['zeta']}), 적분 게인 {snap['vel_integrator_gain']:g}")
     print(f"  1.96 Nm 처짐 예상 {math.degrees(1.96 / kp):.2f} deg  (학습 {math.degrees(1.96 / m['kp']):.2f} deg)")
-    print(f"  출력 토크 한계 {t_lim:.1f} Nm (학습 {m['torque_limit']} Nm)")
+    print(f"  출력 토크 한계 {t_lim:.1f} Nm (수업 문서 {m['torque_limit']} Nm, 팀 학습 {params.TEAM_TORQUE_LIMIT:g} Nm)")
     if snap["vel_integrator_gain"]:
         print("  !! 적분 게인이 켜져 있음: 정적 처짐이 시간이 지나며 0으로 돌아갑니다.")
 
