@@ -29,7 +29,7 @@ MOTORS = {
         "torque_limit": 18.09,     # Nm (18 A 기준)
         "train_gains": (15.71, 0.160),     # ODrive pos_gain, vel_gain
         "course_gains": (12.6, 0.223),     # xdrive_config.txt
-        "phase_R_ref": 0.0684,     # Ohm, 모터 보정 실측 (ID03 67.9, ID04 68.9 mOhm, 납땜 배선)
+        "phase_R_ref": 0.0684,     # Ohm, 모터 보정 실측 (ID01 67.9, ID02 68.9 mOhm, 납땜 배선. 두 보드는 처음에 ID03·ID04로 매김)
         "phase_L_ref": 38.8e-6,    # H, 같은 보정 (38.5, 39.1 uH)
     },
     "5010": {
@@ -46,8 +46,8 @@ MOTORS = {
         "torque_limit": 22.57,
         "train_gains": (44.88, 0.01366),
         "course_gains": (20.0, 0.1),
-        "phase_R_ref": None,       # 아직 실측 없음 (setup_driver.py 6단계 값을 기준으로 씀)
-        "phase_L_ref": None,
+        "phase_R_ref": 0.233,      # Ohm, 모터 보정 실측 (ID12 한 대, 두 번 보정 232.2 / 233.4 mOhm, 2026-11-09)
+        "phase_L_ref": 103e-6,     # H, 같은 보정 (103.4, 102.5 uH)
     },
 }
 

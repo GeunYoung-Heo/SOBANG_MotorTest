@@ -275,7 +275,7 @@ def torque_sign(axis):
     """Iq_measured에 곱하면 pos_estimate(+) 방향 토크 부호가 되는 값.
 
     펌웨어가 전류 명령에 motor.config.direction을 곱하므로(motor.cpp `current_setpoint *= config_.direction`)
-    엔코더 보정에서 direction = -1이 나온 보드는 Iq 부호가 실제 토크와 반대다 (ID03·ID04 모두 -1).
+    엔코더 보정에서 direction = -1이 나온 보드는 Iq 부호가 실제 토크와 반대다 (ID01·ID02 모두 -1).
     """
     return -1.0 if read(axis, "motor.config.direction", 1) == -1 else 1.0
 
