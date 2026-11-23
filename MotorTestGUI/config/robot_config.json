@@ -1,0 +1,194 @@
+{
+  "_설명": "MotorTestGUI 관절 설정. q[rad] = direction*(pos_estimate + k - zero_turn)*2pi/15, k는 노드가 처음 보일 때 관절이 boot_ref_deg +-12도 안에 있다고 보고 정함.",
+  "can": {
+    "interface": "slcan",
+    "channel": "COM16",
+    "channel2": "COM17",
+    "bitrate": 500000,
+    "radxa": true,
+    "radxa_host": "radxa"
+  },
+  "poll_hz": 50.0,
+  "mjcf": "",
+  "move": {
+    "max_speed_dps": 30.0,
+    "max_step_deg": 30.0,
+    "limit_margin_deg": 2.0
+  },
+  "guard": {
+    "track_err_deg": 10.0,
+    "track_err_s": 0.5,
+    "current_a": 8.0,
+    "current_s": 1.0
+  },
+  "imu": {
+    "sensor": "bmi088",
+    "i2c_bus": 3,
+    "port": "/dev/ttyS4",
+    "baud": 230400,
+    "axes": [
+      "+y",
+      "-x",
+      "+z"
+    ],
+    "out_hz": 50.0
+  },
+  "joints": {
+    "leg_left_hip_roll_joint": {
+      "node": 1,
+      "motor": "6512",
+      "direction": -1,
+      "zero_turn": 0.5236053466796875,
+      "boot_ref_deg": 0.0,
+      "torque_sign": -1,
+      "torque_sign_src": "백업 xdrive_ID01_after_setup_20261105_172740.json",
+      "stop_lo_deg": null,
+      "stop_hi_deg": null,
+      "stop_src": "수업 모델 v1 메쉬 충돌 검사 (2026-11-11)",
+      "dir_checked": "2026-11-17"
+    },
+    "leg_left_hip_yaw_joint": {
+      "node": 3,
+      "motor": "6512",
+      "direction": -1,
+      "zero_turn": 0.24406147003173828,
+      "boot_ref_deg": 0.0,
+      "torque_sign": 1,
+      "torque_sign_src": "백업 xdrive_ID03_after_setup_20261107_103829.json",
+      "stop_lo_deg": null,
+      "stop_hi_deg": 53.38,
+      "stop_src": "수업 모델 v1 메쉬 충돌 검사 (2026-11-11)",
+      "dir_checked": "2026-11-17"
+    },
+    "leg_left_hip_pitch_joint": {
+      "node": 5,
+      "motor": "6512",
+      "direction": -1,
+      "zero_turn": 0.8354224562644958,
+      "boot_ref_deg": 0.0,
+      "torque_sign": 1,
+      "torque_sign_src": "백업 xdrive_ID05_after_setup_20261107_094938.json",
+      "stop_lo_deg": -75.55,
+      "stop_hi_deg": 133.09,
+      "stop_src": "수업 모델 v1 메쉬 충돌 검사 (2026-11-11)",
+      "dir_checked": "2026-11-17"
+    },
+    "leg_left_knee_pitch_joint": {
+      "node": 7,
+      "motor": "6512",
+      "direction": -1,
+      "zero_turn": 1.6002044677734375,
+      "boot_ref_deg": 0.0,
+      "torque_sign": -1,
+      "torque_sign_src": "GUI에서 바꿈",
+      "stop_lo_deg": -140.0,
+      "stop_hi_deg": 0.0,
+      "stop_src": "수업 모델 v1 메쉬 충돌 검사 (2026-11-11)",
+      "dir_checked": "2026-11-17"
+    },
+    "leg_left_ankle_pitch_joint": {
+      "node": 11,
+      "motor": "5010",
+      "direction": -1,
+      "zero_turn": 0.983802791684866,
+      "boot_ref_deg": 0.0,
+      "torque_sign": 1,
+      "torque_sign_src": "백업 xdrive_ID11_after_setup_20261109_123245.json",
+      "stop_lo_deg": -60.0,
+      "stop_hi_deg": 30.0,
+      "stop_src": "수업 모델 v1 메쉬 충돌 검사 (2026-11-11)",
+      "dir_checked": "2026-11-17"
+    },
+    "leg_left_ankle_roll_joint": {
+      "node": 13,
+      "motor": "5010",
+      "direction": -1,
+      "zero_turn": 0.2538795471191406,
+      "boot_ref_deg": 0.0,
+      "torque_sign": 1,
+      "torque_sign_src": "백업 xdrive_ID13_after_setup_20261109_123227.json",
+      "stop_lo_deg": -15.0,
+      "stop_hi_deg": 15.0,
+      "stop_src": "수업 모델 v1 메쉬 충돌 검사 (2026-11-11)",
+      "dir_checked": "2026-11-17"
+    },
+    "leg_right_hip_roll_joint": {
+      "node": 2,
+      "motor": "6512",
+      "direction": -1,
+      "zero_turn": 1.026169776916504,
+      "boot_ref_deg": 0.0,
+      "torque_sign": -1,
+      "torque_sign_src": "백업 xdrive_ID02_after_setup_20261105_175103.json",
+      "stop_lo_deg": null,
+      "stop_hi_deg": null,
+      "stop_src": "수업 모델 v1 메쉬 충돌 검사 (2026-11-11)",
+      "dir_checked": "2026-11-17"
+    },
+    "leg_right_hip_yaw_joint": {
+      "node": 4,
+      "motor": "6512",
+      "direction": -1,
+      "zero_turn": 0.3778390884399414,
+      "boot_ref_deg": 0.0,
+      "torque_sign": 1,
+      "torque_sign_src": "백업 xdrive_ID04_after_setup_20261107_102249.json",
+      "stop_lo_deg": -54.85,
+      "stop_hi_deg": null,
+      "stop_src": "수업 모델 v1 메쉬 충돌 검사 (2026-11-11)",
+      "dir_checked": "2026-11-17"
+    },
+    "leg_right_hip_pitch_joint": {
+      "node": 6,
+      "motor": "6512",
+      "direction": -1,
+      "zero_turn": -0.14880752563476562,
+      "boot_ref_deg": 0.0,
+      "torque_sign": 1,
+      "torque_sign_src": "백업 xdrive_ID06_after_setup_20261107_100907.json",
+      "stop_lo_deg": -133.11,
+      "stop_hi_deg": 75.55,
+      "stop_src": "수업 모델 v1 메쉬 충돌 검사 (2026-11-11)",
+      "dir_checked": "2026-11-17"
+    },
+    "leg_right_knee_pitch_joint": {
+      "node": 8,
+      "motor": "6512",
+      "direction": -1,
+      "zero_turn": 0.9853124488145113,
+      "boot_ref_deg": 0.0,
+      "torque_sign": -1,
+      "torque_sign_src": "백업 xdrive_ID08_after_setup_20261109_105954.json",
+      "stop_lo_deg": 0.0,
+      "stop_hi_deg": 140.0,
+      "stop_src": "수업 모델 v1 메쉬 충돌 검사 (2026-11-11)",
+      "dir_checked": "2026-11-17"
+    },
+    "leg_right_ankle_pitch_joint": {
+      "node": 12,
+      "motor": "5010",
+      "direction": -1,
+      "zero_turn": -1.189204216003418,
+      "boot_ref_deg": 0.0,
+      "torque_sign": -1,
+      "torque_sign_src": "백업 xdrive_ID12_after_setup_20261109_105442.json",
+      "stop_lo_deg": -30.0,
+      "stop_hi_deg": 60.0,
+      "stop_src": "수업 모델 v1 메쉬 충돌 검사 (2026-11-11)",
+      "dir_checked": "2026-11-17"
+    },
+    "leg_right_ankle_roll_joint": {
+      "node": 14,
+      "motor": "5010",
+      "direction": -1,
+      "zero_turn": 0.9324826598167419,
+      "boot_ref_deg": 0.0,
+      "torque_sign": 1,
+      "torque_sign_src": "백업 xdrive_ID14_after_setup_20261109_105951.json",
+      "stop_lo_deg": -15.0,
+      "stop_hi_deg": 15.0,
+      "stop_src": "수업 모델 v1 메쉬 충돌 검사 (2026-11-11)",
+      "dir_checked": "2026-11-17"
+    }
+  }
+}

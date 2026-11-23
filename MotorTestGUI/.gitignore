@@ -1,0 +1,5 @@
+# 수업 로봇 모델(All rights reserved): python fetch_model.py 로 받는다
+assets/asmr2026-humanoid-v1/
+
+# 보행 테스트 기록 (실행마다 폴더 하나)
+logs/
