@@ -136,6 +136,15 @@ class Runner:
                 time.sleep(0.3)
                 d = axis.encoder.pos_estimate - p0
                 print(f"      명령 {off:+.2f} turn -> {d:+.4f} turn (출력 {params.turn_to_out_deg(d):+.2f} deg)")
+                if abs(d - off) > 0.1:  # 정상은 마찰로 0.01 turn 정도 덜 감
+                    raise RuntimeError(
+                        f"명령 {off:+.2f} turn인데 {d:+.4f} turn에 있습니다. 모터가 명령대로 움직이지 않습니다.\n"
+                        "확인할 것:\n"
+                        "  - 힘을 뺀 상태에서 출력축을 손으로 돌려 걸리는 데가 없는지\n"
+                        "  - python sensor_mode.py 로 출력축을 손으로 한 바퀴 돌렸을 때 '시작 기준'이 360 deg로 "
+                        "읽히는지 (자석·magnet extender·보드 위치)\n"
+                        "  - python check_wiring.py --id <ID> --motor <6512|5010> --skip-dc (모터 3상 연결)\n"
+                        "  - 액추에이터를 다시 조립했다면 6단계 보정부터 다시 (--from-step 6)")
         finally:
             axis.requested_state = odrv_usb.STATE_IDLE
 
