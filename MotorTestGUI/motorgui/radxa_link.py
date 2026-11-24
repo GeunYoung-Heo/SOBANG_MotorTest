@@ -30,12 +30,14 @@ import can
 
 RADXA_DIR = Path(__file__).resolve().parents[1] / "radxa"
 BRIDGE_SRC = RADXA_DIR / "can_bridge.py"
-DEPLOY_FILES = ("can_bridge.py", "imu_reader.py", "bmi088.py")
+DEPLOY_FILES = ("can_bridge.py", "imu_reader.py", "bmi088.py",
+                "walk_policy.py", "real_walk.py", "real_walk_loop.py",          # 정책 보행 (RL 세션 코드 사본)
+                "policies/real_walk/policy.onnx", "policies/real_walk/policy.yaml")
 REMOTE_DIR = "~/motor_bridge"
 HDR = struct.Struct("<BH")
 FRAME = struct.Struct("<BBBxI8s")
 PING = struct.Struct("<dI")
-T_FRAME, T_PING, T_PONG, T_INFO, T_LOG, T_IMU, T_IMU_CMD = 1, 2, 3, 4, 5, 6, 7
+T_FRAME, T_PING, T_PONG, T_INFO, T_LOG, T_IMU, T_IMU_CMD, T_POLICY_CMD, T_POLICY = 1, 2, 3, 4, 5, 6, 7, 8, 9
 F_EXT, F_RTR = 1, 2
 PING_S = 0.1
 SSH_OPTS = ["-o", "BatchMode=yes", "-o", "ConnectTimeout=8", "-o", "ServerAliveInterval=2",
@@ -74,6 +76,7 @@ class RadxaConnection:
         self.timeout = timeout
         self.extra_args = extra_args
         self.imu_feed = imu_feed
+        self.policy_handler = None           # 정책 보행 메시지(dict)를 받을 함수 (PolicyWalk.on_message)
         self.proc = None
         self.sock = None
         self.info = {}
@@ -242,6 +245,17 @@ class RadxaConnection:
                         elif d.get("type") == "info":
                             self._log(f"Radxa IMU: {d.get('sensor')} · {d.get('detail')}")
                         self.imu_feed.on_message(d)
+                    elif typ == T_POLICY:
+                        try:
+                            d = json.loads(payload.decode())
+                        except ValueError:
+                            continue
+                        h = self.policy_handler
+                        if h is not None:
+                            try:
+                                h(d)
+                            except Exception as e:  # noqa: BLE001 - 수신 스레드가 죽지 않게
+                                self._log(f"⚠ 정책 메시지 처리 오류: {e}")
         except OSError as e:
             self._mark_dead(f"Radxa 연결 끊김: {e}")
             return
@@ -292,6 +306,35 @@ class RadxaConnection:
             self._send(T_IMU_CMD, json.dumps({"cmd": "start", "opts": opts}).encode())
         except (OSError, can.CanOperationError) as e:
             return f"IMU 명령을 보내지 못했습니다: {e}"
+        return None
+
+    # ------------------------------------------------------------------ 정책 보행
+    def policy_send(self, d):
+        """POLICY_CMD 하나. 실패하면 이유 문자열."""
+        try:
+            self._send(T_POLICY_CMD, json.dumps(d).encode())
+        except (OSError, can.CanOperationError) as e:
+            return f"정책 명령을 보내지 못했습니다: {e}"
+        return None
+
+    def fetch_file(self, remote_path, local_path):
+        """Radxa의 파일 하나를 가져온다 (ssh cat). 실패하면 이유 문자열."""
+        local_path = Path(local_path)
+        if self.host.startswith("tcp://"):           # PC에서 시험할 때: 중계가 같은 PC
+            try:
+                local_path.write_bytes(Path(remote_path).read_bytes())
+                return None
+            except OSError as e:
+                return str(e)
+        if any(c in remote_path for c in "'\"`$;&|<> \n"):
+            return f"경로가 이상합니다: {remote_path!r}"
+        try:
+            r = self._ssh([f"cat '{remote_path}'"])
+        except subprocess.TimeoutExpired:
+            return "시간 초과"
+        if r.returncode != 0:
+            return (r.stderr or b"").decode(errors="replace").strip() or f"코드 {r.returncode}"
+        local_path.write_bytes(r.stdout)
         return None
 
     def imu_stop(self):

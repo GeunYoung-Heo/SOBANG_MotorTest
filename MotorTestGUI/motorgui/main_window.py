@@ -7,6 +7,7 @@ from PySide6.QtWidgets import (QCheckBox, QComboBox, QFileDialog, QHBoxLayout, Q
                                QPlainTextEdit, QPushButton, QSplitter, QTabWidget, QVBoxLayout, QWidget)
 
 from .imu import SENSOR_SHORT
+from .policy_walk import STATE_KO as POLICY_STATE_KO
 from .render import OffscreenRenderer, RobotView, VIEW_PRESETS, apply_preset, copy_camera, new_camera
 from .theme import C, RGBA
 from .walk import STAGE_KO
@@ -36,6 +37,10 @@ HELP_TEXT = """<h3>MotorTestGUI</h3>
 12개 관절 연결·영점과 방향 '실물로 확인함'이 필요합니다. 걸음 속도(걸음/분)로 다리 움직임 빠르기를 정합니다. 시작 → 토크 켜기 → 준비 자세 → 걷기 → (정한 시간 또는 '천천히 멈추기') → 처음 자세 → 힘 풀기.
 Esc는 언제든 즉시 멈추고 모두 힘을 풉니다. 매 실행은 MotorTestGUI/logs/walk_날짜_시각/에 자동 기록됩니다.
 실물이 연결되지 않았으면 시뮬에서만 움직입니다.</p>
+<p><b>정책 보행</b> (오른쪽 '정책 보행' 탭): SOBANG_Locomotion의 실물 보행 정책을 Radxa에서 돌립니다 (Radxa 경유 연결,
+IMU '받는 중', 12개 관절 영점·방향 확인, 모두 힘 풀린 상태). <b>보행 시작</b> → 4초 동안 서기 자세로 → 발이 바닥에 닿으면
+<b>정책 켜기</b> → 설정한 속도(기본 0.1 m/s)로 앞으로만 걷습니다. <b>Esc</b>는 즉시 정책을 끝내고 모든 관절 힘을 풉니다.
+기록은 logs/policy_walk_*/.</p>
 <p><b>IMU 자세</b> (오른쪽 'IMU 자세' 탭): 로봇의 BMI088은 Radxa에 꽂혀 있습니다. <b>Radxa 경유</b>로 연결하면 IMU가
 자동으로 시작하고(처음 2초는 로봇을 가만히), 3D 위의 <b>자세 반영 (IMU)</b>도 켜져 왼쪽 실물 그림이 몸통 기울기(roll·pitch)만큼
 기울어집니다. yaw는 반영하지 않습니다. 가상 로봇에서는 가짜 IMU 값이 나옵니다.</p>
@@ -294,7 +299,7 @@ class MainWindow(QMainWindow):
         info = app.infos.get(self.panel.name)
         sel = info.jid if info is not None else -1
         t = app.now()
-        has_target = bool(app.cmdr.active_names())
+        has_target = bool(app.cmdr.active_names()) or app.policy.target_q() is not None
         any_real = any(app.real_q(n) is not None for n in app.cfg.names)
 
         colors, counts = self._joint_colors(True)
@@ -323,6 +328,11 @@ class MainWindow(QMainWindow):
             if wk.active:
                 lines.append((C["real"], f"보행 테스트: {STAGE_KO.get(wk.stage(t), '')} · {wk.walked_s(t):.1f} s"
                                          " · Esc = 즉시 모두 힘 풀기"))
+            pw = app.policy
+            if pw.active:
+                extra = f" {100 * float(pw.status.get('ramp', 0)):.0f}%" if pw.state == "ramp" else ""
+                lines.append((C["real"], f"정책 보행 (Radxa): {POLICY_STATE_KO.get(pw.state, pw.state)}{extra}"
+                                         " · 주황 = 정책 목표 · Esc = 즉시 멈춤 + 모두 힘 풀기"))
             v.lines = lines
             j = app.cfg.joint(self.panel.name)
             q = app.real_q(self.panel.name)

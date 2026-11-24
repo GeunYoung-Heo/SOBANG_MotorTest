@@ -170,7 +170,7 @@ class RobotConfig:
     imu_port: str = "/dev/ttyS4"      # (IM10A용, GUI에서는 안 씀)
     imu_baud: int = 230400            # (IM10A용, GUI에서는 안 씀)
     imu_axes: list = field(default_factory=lambda: ["+y", "-x", "+z"])   # 몸통 x, y, z 방향의 IMU 축
-    imu_out_hz: float = 50.0          # Radxa → GUI 전송 빈도
+    imu_out_hz: float = 200.0         # imu_reader.py 출력 빈도 (정책 보행이 씀. 중계가 GUI로는 약 50 Hz로 솎아 보냄)
     path: Path = field(default=CONFIG_PATH, repr=False)
 
     def imu_opts(self):
@@ -241,7 +241,7 @@ class RobotConfig:
         axes = im.get("axes", cfg.imu_axes)
         if isinstance(axes, list) and len(axes) == 3:
             cfg.imu_axes = [str(a) for a in axes]
-        cfg.imu_out_hz = float(im.get("out_hz", cfg.imu_out_hz))
+        # out_hz는 파일에서 읽지 않음 (정책 보행에 200 Hz가 필요, 2026-11-24)
         for name, jd in d.get("joints", {}).items():
             try:
                 j = cfg.joint(name)

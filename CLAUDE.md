@@ -97,3 +97,9 @@ scp radxa:/etc/os-release .
 - sudo는 비밀번호가 필요하다. `radxa.local.env`의 값을 화면에 내지 않고 stdin으로 넘긴다: `grep '^RADXA_PASSWORD=' radxa.local.env | cut -d= -f2- | tr -d '\r\n' | ssh radxa 'sudo -S -p "" 명령'`.
 - I2C3는 기본 100 kHz라 `imu_reader.py`의 BMI088 필터가 약 300 Hz로 돈다. MotorTestGUI의 IMU 사용법은 `MotorTestGUI/README.md` 11절.
 - 같은 날 Radxa 인터넷이 안 됐다 (노트북 ICS). 시계도 NTP를 못 맞춰 3일 늦었다 (Nov 20으로 표시).
+
+### 정책 보행 (2026-11-24)
+
+- 사용자 허락을 받고 onnxruntime 1.22.1(+ coloredlogs, flatbuffers, humanfriendly, mpmath, packaging, protobuf, sympy)을 radxa 계정 `~/.local`에 설치했다. 인터넷이 없어 노트북에서 `pip download --platform manylinux_2_27_aarch64 --python-version 311 --only-binary=:all:`로 받은 wheel을 scp로 보내 `pip install --user --break-system-packages --no-index --find-links`로 넣었다. PyYAML 6.0은 원래 있었다.
+- 정책 점검: `ssh radxa "cd ~/motor_bridge && python3 walk_policy.py"` → ok, 기준 차이 4.3e-6, 한 스텝 0.81 ms.
+- 정책은 Radxa의 CAN 중계 안에서 돈다 (`MotorTestGUI/README.md` 12절). GUI 정책 보행 탭에서 시작·정지.

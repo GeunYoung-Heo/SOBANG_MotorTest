@@ -16,6 +16,7 @@ from . import protocol as P
 from .config import TURN_TO_JOINT_DEG, driver_joint_gains
 from .imu import AXIS_CHOICES, SENSOR_SHORT, axes_valid, gravity_body, roll_pitch_yaw
 from .plots import JointPlots
+from .policy_walk import FORWARD_DEFAULT, FORWARD_MAX, STATE_KO as STATE_KO_POLICY
 from .theme import C, dot_icon
 from .walk import LOG_DIR, MAX_DPS as WALK_MAX_DPS, STAGE_KO, WARN_DPS as WALK_WARN_DPS, WalkParams, open_folder
 
@@ -750,6 +751,7 @@ class JointPanel(QWidget):
         self.tabs.addTab(_scroll(self._build_cmd_tab()), "명령")
         self.tabs.addTab(_scroll(self._build_cal_tab()), "영점·방향 설정")
         self.tabs.addTab(_scroll(self._build_walk_tab()), "보행 테스트")
+        self._policy_tab = self.tabs.addTab(_scroll(self._build_policy_tab()), "정책 보행")
         self._imu_tab = self.tabs.addTab(_scroll(self._build_imu_tab()), "IMU 자세")
         self.tabs.setMinimumHeight(170)
         split.addWidget(self.tabs)
@@ -1356,6 +1358,163 @@ class JointPanel(QWidget):
                 lines.append("시작하면: <b>시뮬만</b> (실물이 연결되지 않았거나 '명령' 탭의 '실물에 보내기'가 꺼짐)")
         self.wk_status.setText("<br>".join(lines))
 
+    # ------------------------------------------------------------------ 정책 보행 탭
+    def _build_policy_tab(self):
+        w = QWidget()
+        v = QVBoxLayout(w)
+        v.setSpacing(6)
+        row = QHBoxLayout()
+        self.pw_start = QPushButton("▶ 보행 시작 (서기 자세로)")
+        self.pw_start.setObjectName("primary")
+        self.pw_start.setToolTip("Radxa에서 정책 보행 루프를 시작합니다: 지금 자세에서 서기 자세까지 4초 동안 옮기고 유지합니다.\n"
+                                 "정책은 아직 켜지지 않습니다 (발이 바닥에 닿은 뒤 '정책 켜기').")
+        self.pw_floor = QPushButton("정책 켜기 (발 닿은 뒤)")
+        self.pw_floor.setToolTip("서기 자세를 유지하는 중에, 발이 바닥에 닿은 뒤 누릅니다. 직전 행동 0으로 정책을 시작하고\n"
+                                 "아래 '앞으로 걷는 속도'로 바로 걷습니다. 공중에서 켜면 정책이 다리를 휘두릅니다 (RL 절차서 S3).")
+        self.pw_stop = QPushButton("■ 멈춤 · 힘 풀기")
+        self.pw_stop.setObjectName("estop")
+        self.pw_stop.setToolTip("정책을 바로 끝내고 모든 관절 IDLE (Esc와 같음)")
+        self.pw_open = QPushButton("기록 폴더")
+        for b in (self.pw_start, self.pw_floor, self.pw_stop):
+            row.addWidget(b)
+        row.addStretch(1)
+        row.addWidget(self.pw_open)
+        v.addLayout(row)
+        self.pw_status = _label("", None)
+        self.pw_status.setWordWrap(True)
+        self.pw_status.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        v.addWidget(self.pw_status)
+
+        sp = QHBoxLayout()
+        sp.setSpacing(6)
+        sp.addWidget(_label("앞으로 걷는 속도", None, "앞으로만 걷습니다 (옆걸음·회전 0). 0~0.5 m/s (학습 범위). "
+                                                     "정책을 켜는 순간부터 이 속도로 걷고, 걷는 중에 바꾸면 바로 Radxa로 갑니다."))
+        self.pw_vx = QDoubleSpinBox()
+        self.pw_vx.setRange(0.0, FORWARD_MAX)
+        self.pw_vx.setSingleStep(0.05)
+        self.pw_vx.setDecimals(2)
+        self.pw_vx.setSuffix(" m/s")
+        self.pw_vx.setKeyboardTracking(False)
+        self.pw_vx.setValue(FORWARD_DEFAULT)
+        sp.addWidget(self.pw_vx)
+        self.pw_quick = []
+        for vx, text in ((0.0, "제자리 0"), (0.1, "0.1"), (0.2, "0.2"), (0.3, "0.3")):
+            b = QPushButton(text)
+            b.setToolTip("제자리에 서서 걸음만 (명령 0)" if vx == 0.0 else f"앞으로 {vx:.1f} m/s")
+            b.clicked.connect(lambda _=False, x=vx: self._pw_set(x))
+            sp.addWidget(b)
+            self.pw_quick.append(b)
+        sp.addStretch(1)
+        v.addLayout(sp)
+        self.pw_torque = QCheckBox("토크 한계 6 N·m (Radxa가 목표를 잘라서)")
+        self.pw_torque.setChecked(True)
+        self.pw_torque.setToolTip(
+            "정책은 관절 토크 6 N·m 한계로 학습했습니다. 이 드라이버 펌웨어(ODrive 0.5.1)는 CAN으로 전류 한계를 바꾸지\n"
+            "못해서, Radxa가 20 ms마다 목표를 보내기 직전에 드라이버 PD 토크 Kp·(목표 − 각도) − Kd·속도가 ±6 N·m 안에\n"
+            "들도록 목표를 자릅니다. 다음 목표까지 20 ms 사이에 관절이 밀리면 잠깐 넘을 수 있습니다 (근사).\n"
+            "끄면 드라이버 한계 18 A까지 나옵니다 (무릎·고관절 약 18 N·m, 발목 약 23 N·m, 12 A SMPS 과부하 위험).\n"
+            "시작할 때의 값으로 정해지고, 정책 보행 중에는 바꿀 수 없습니다.")
+        v.addWidget(self.pw_torque)
+        note = _label("Esc 또는 '모두 힘 풀기' = 즉시 정책 끝 + 모든 관절 힘 풀기. Radxa는 몸통이 20° 넘게 기울거나(정책 중), "
+                      "드라이버 오류·응답 끊김, IMU 끊김, 주기가 10 ms 넘게 5번 연속 늦으면 스스로 멈춥니다. "
+                      "기록: logs/policy_walk_날짜_시각/ (Radxa의 real_walk.npz를 끝날 때 가져옴).", "muted")
+        note.setWordWrap(True)
+        v.addWidget(note)
+        v.addStretch(1)
+
+        self.pw_start.clicked.connect(self._pw_start)
+        self.pw_floor.clicked.connect(lambda: self._do(self.app.policy.floor))
+        self.pw_stop.clicked.connect(lambda: self.app.idle_all("정책 보행 '멈춤' 버튼"))
+        self.pw_open.clicked.connect(lambda: open_folder(self.app.policy.log_dir or LOG_DIR))
+        self.pw_vx.valueChanged.connect(lambda _=0.0: self._pw_cmd())
+        self.pw_torque.toggled.connect(lambda on: setattr(self.app.policy, "torque_clamp", bool(on)))
+        return w
+
+    def _pw_set(self, vx):
+        self.pw_vx.blockSignals(True)
+        self.pw_vx.setValue(vx)
+        self.pw_vx.blockSignals(False)
+        self._pw_cmd()
+
+    def _pw_cmd(self):
+        err = self.app.policy.set_forward(self.pw_vx.value())
+        if err:
+            self._show(err, True)
+
+    def _pw_start(self):
+        pw = self.app.policy
+        probs = pw.preflight()
+        if probs:
+            self._show("정책 보행을 시작할 수 없습니다: " + " / ".join(probs), True)
+            return
+        notes = pw.notes()
+        self._pw_cmd()
+        text = ("Radxa에서 정책 보행을 시작합니다.\n\n"
+                "· 지금 자세에서 서기 자세(무릎 22.9°)까지 4초 동안 움직이고 유지합니다.\n"
+                "· 정책은 '정책 켜기'를 눌러야 켜집니다 (발이 바닥에 닿은 뒤).\n"
+                f"· 정책을 켜면 앞으로 {pw.command[0]:.2f} m/s로 걷습니다 (옆걸음·회전 없음).\n"
+                f"· 토크 한계 6 N·m: {'켬 (Radxa가 목표를 잘라서)' if pw.torque_clamp else '끔 (드라이버 18 A까지)'}\n"
+                "· Esc = 즉시 멈춤 + 모두 힘 풀기\n\n"
+                "로봇이 하네스에 걸려 있고, 전원 차단 스위치 담당이 준비됐나요?")
+        if notes:
+            text += "\n\n주의:\n· " + "\n· ".join(notes)
+        if QMessageBox.question(self, "정책 보행 시작", text) != QMessageBox.Yes:
+            return
+        err = pw.start()
+        if err:
+            self._show(err, True)
+        else:
+            self._show("정책 보행 시작: 서기 자세로 이동 중", False)
+
+    def _refresh_policy(self):
+        pw = self.app.policy
+        st = pw.state
+        active = pw.active
+        self.pw_start.setEnabled(not active)
+        self.pw_floor.setEnabled(st == "hold")
+        self.pw_stop.setEnabled(active)
+        self.pw_torque.setEnabled(not active)
+        col = {"walk": C["real"], "hold": C["good"], "ramp": C["warning"], "starting": C["warning"],
+               "stopped": C["muted"], "error": C["critical"]}.get(st, C["muted"])
+        s = pw.status
+        head = f"<span style='color:{col}'>●</span> <b>{STATE_KO_POLICY.get(st, st)}</b>"
+        if st == "ramp":
+            head += f" {100 * float(s.get('ramp', 0.0)):.0f}%"
+        lines = [head]
+        if active:
+            lines[0] += f"  <span style='color:{C['serious']}'><b>비상: Esc</b> = 즉시 멈춤 + 모두 힘 풀기</span>"
+        if st == "hold":
+            lines.append(f"<b>발이 바닥에 닿으면 '정책 켜기'</b> → 앞으로 {pw.command[0]:.2f} m/s로 걷기 "
+                         "(하네스로 대부분 지지)")
+        if active and s:
+            t_walk = f" · 정책 {self.app.now() - pw.floor_t:.1f} s" if st == "walk" and pw.floor_t else ""
+            lines.append(f"주기 {s.get('period_ms', 0):.1f} ms · 엔코더 읽기 {s.get('read_ms', 0):.1f} ms · "
+                         f"IMU {s.get('imu_age_ms', 0):.0f} ms 전 · 기울기 {s.get('tilt', 0):.1f}°"
+                         + (f" · 6 N·m 한계: 잘림 {s.get('clamped_joints', 0)}개 (누적 {100 * float(s.get('clamp_frac') or 0):.0f}% 주기)"
+                            if s.get("torque_clamp") else f" · <span style='color:{C['warning']}'>토크 한계 꺼짐 (18 A)</span>")
+                         + t_walk
+                         + (f" · <span style='color:{C['warning']}'>엔코더 놓침 {s['miss']}</span>"
+                            if s.get("miss") else ""))
+            c = s.get("command") or [0, 0, 0]
+            lines.append(f"Radxa가 쓰는 속도: 앞으로 {c[0]:.2f} m/s"
+                         + (f" <span style='color:{C['warning']}'>(옆 {c[1]:+.2f}, 회전 {c[2]:+.2f})</span>"
+                            if c[1] or c[2] else ""))
+        if st in ("stopped", "error") and pw.reason:
+            lines.append(f"<span style='color:{C['critical'] if st == 'error' else C['ink2']}'>"
+                         f"{'멈춘 이유' if st == 'stopped' else '이유'}: {pw.reason}</span>")
+        if pw.fetch_note:
+            lines.append(f"<span style='color:{C['muted']}'>{pw.fetch_note}</span>")
+        if not active:
+            probs = pw.preflight()
+            notes = pw.notes()
+            if probs:
+                lines.append(f"<span style='color:{C['warning']}'>⚠ " + "<br>⚠ ".join(probs) + "</span>")
+            else:
+                lines.append("시작 준비 완료: Radxa 경유, 12개 관절, IMU 확인")
+            if notes:
+                lines.append(f"<span style='color:{C['muted']}'>※ " + "<br>※ ".join(notes) + "</span>")
+        self.pw_status.setText("<br>".join(lines))
+
     # ------------------------------------------------------------------ IMU 자세 탭
     def _build_imu_tab(self):
         w = QWidget()
@@ -1674,8 +1833,9 @@ class JointPanel(QWidget):
             self.send_real.setChecked(app.send_real)
         self._refresh_sweep(connected, use_real)
         self._refresh_walk(connected)
+        self._refresh_policy()
         self._refresh_imu()
-        if app.walk.active:     # 보행 중에는 관절별 명령·영점 변경을 막음 ('힘 풀기'는 그대로 → 보행 중단)
+        if app.walk.active or app.policy.active:     # 보행 중에는 관절별 명령·영점 변경을 막음 ('힘 풀기'는 그대로 → 중단)
             for b in [self.btn_on, self.btn_clear, self.rel_go, self.abs_go, self.abs_zero, self.zero_btn,
                       self.clear_zero_btn, self.dir_p, self.dir_m, self.dir_chk, self.dir_all_btn,
                       self.sweep_start_btn, self.zero_all_btn, self.send_real] + self.jog_btns:

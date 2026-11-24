@@ -23,15 +23,22 @@ CAN 장치:
   2 PING     GUI→    <dI> 보낸 시각, 번호   →  3 PONG 같은 내용
   4 INFO     →GUI    JSON (연결 직후: 버스 목록, 비트레이트, 버전, IMU 지원 여부)
   5 LOG      →GUI    UTF-8 글
-  6 IMU      →GUI    JSON 한 줄 (imu_reader.py 출력 그대로, 끝나면 {"type": "exit", ...})
+  6 IMU      →GUI    JSON 한 줄 (imu_reader.py 출력, 표본은 약 50 Hz로 솎음. 끝나면 {"type": "exit", ...})
   7 IMU_CMD  GUI→    JSON {"cmd": "start", "opts": {sensor, bus, port, baud, axes, out_hz}} 또는 {"cmd": "stop"}
+  8 POLICY_CMD GUI→  JSON {"cmd": "start", joints, torque_clamp, command, log_name} / "floor" / "command" (v) / "stop"
+  9 POLICY   →GUI    JSON (started, status 10 Hz, stopped, error)
 
 IMU: GUI가 IMU_CMD start를 보내면 같은 폴더의 imu_reader.py를 별도 프로세스로 띄운다 (BMI088이면 numpy·smbus2가
 그 프로세스에만 필요). IMU가 멈추거나 오류가 나도 CAN 중계와 감시(IDLE)에는 영향이 없다. GUI 연결이 끊기면 IMU도 끈다.
+
+정책 보행: POLICY_CMD start를 받으면 walk_policy.py(numpy, onnxruntime, PyYAML)를 불러 RL 세션의 run_walk_test()를
+이 프로세스의 스레드로 돌린다 (CAN 장치와 IMU 값을 직접 씀). GUI에서 IDLE 프레임이 오거나(Esc), 멈춤 명령, GUI 연결 끊김,
+감시(0.5 s) 중 하나면 정책을 멈추고 모든 node를 IDLE로 둔다.
 """
 import argparse
 import glob
 import json
+import math
 import os
 import re
 import select
@@ -50,11 +57,18 @@ SLCAN_BITRATE = {10000: b"0", 20000: b"1", 50000: b"2", 100000: b"3", 125000: b"
 HDR = struct.Struct("<BH")
 FRAME = struct.Struct("<BBBxI8s")
 PING = struct.Struct("<dI")
-T_FRAME, T_PING, T_PONG, T_INFO, T_LOG, T_IMU, T_IMU_CMD = 1, 2, 3, 4, 5, 6, 7
+T_FRAME, T_PING, T_PONG, T_INFO, T_LOG, T_IMU, T_IMU_CMD, T_POLICY_CMD, T_POLICY = 1, 2, 3, 4, 5, 6, 7, 8, 9
 F_EXT, F_RTR = 1, 2
 SET_AXIS_STATE, STATE_IDLE = 0x007, 1
 IMU_READER = os.path.join(os.path.dirname(os.path.abspath(__file__)), "imu_reader.py")
 AXIS_RE = re.compile(r"^[+-]?[xyz]$")
+IMU_GUI_PERIOD = 0.018          # GUI로 보내는 IMU 표본 간격 (약 50 Hz). 정책은 모든 표본을 씀
+
+try:                            # 정책 보행 (표준 라이브러리만 불러옴. numpy 등은 시작할 때)
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import walk_policy
+except ImportError:
+    walk_policy = None
 
 
 def log(text):
@@ -272,8 +286,9 @@ def imu_args(opts):
 
 
 class ImuProc:
-    def __init__(self, send):
+    def __init__(self, send, on_line):
         self.send = send                  # send(종류, 내용): 지금 연결된 GUI로
+        self.on_line = on_line            # imu_reader.py의 표준 출력 한 줄 (bytes)
         self.proc = None
         self.lock = threading.Lock()
 
@@ -295,7 +310,7 @@ class ImuProc:
         for raw in iter(p.stdout.readline, b""):
             line = raw.strip()
             if line:
-                self.send(T_IMU, line)
+                self.on_line(line)
         rc = p.wait()
         with self.lock:
             current = self.proc is p
@@ -342,7 +357,95 @@ class Bridge:
         self.seen = [set() for _ in devices]        # 버스별로 본 node
         self.dev_err = [None] * len(devices)
         self.counts = {"rx_can": 0, "tx_can": 0, "tx_err": 0}
-        self.imu = ImuProc(self.send_client)
+        self.imu = ImuProc(self.send_client, self.on_imu_line)
+        self._imu_fwd_t = 0.0
+        self.hb = {}                       # node -> (받은 시각, axis_error, axis_state): 마지막 heartbeat
+        self.policy = None                 # walk_policy.PolicyRun (정책 보행 중)
+        self.policy_lock = threading.Lock()
+        self.policy_imu = None             # walk_policy.FeedImu (IMU 표본이 오면 만듦)
+
+    # -- IMU 표본: 정책에는 모두, GUI에는 솎아서
+    def on_imu_line(self, line):
+        if line.startswith(b'{"t"'):
+            if self.policy_imu is None and walk_policy is not None and not walk_policy.missing_deps():
+                try:
+                    self.policy_imu = walk_policy.FeedImu()
+                except Exception:  # noqa: BLE001
+                    pass
+            if self.policy_imu is not None:
+                try:
+                    self.policy_imu.update(json.loads(line))
+                except ValueError:
+                    pass
+            now = time.monotonic()
+            if now - self._imu_fwd_t < IMU_GUI_PERIOD:
+                return
+            self._imu_fwd_t = now
+        self.send_client(T_IMU, line)
+
+    # -- 정책 보행
+    def policy_report(self, d):
+        self.send_client(T_POLICY, json.dumps(d, ensure_ascii=False).encode())
+        if d.get("type") in ("started", "stopped", "error"):
+            log(f"정책 보행: {d}")
+
+    def policy_active(self):
+        p = self.policy
+        return p is not None and p.active
+
+    def stop_policy(self, why):
+        """정책을 멈추고(다음 주기에 끝남) 바로 모든 node를 IDLE. 정책이 돌고 있었으면 True."""
+        with self.policy_lock:
+            p = self.policy
+            if p is None or not p.active:
+                return False
+            p.stop(why)
+        self.idle_all(f"정책 멈춤: {why}")
+        return True
+
+    def policy_command(self, payload):
+        try:
+            d = json.loads(payload.decode())
+            cmd = d.get("cmd")
+            p = self.policy
+            if cmd == "start":
+                if walk_policy is None:
+                    raise RuntimeError("Radxa에 walk_policy.py가 없습니다 (GUI를 새로 연결하면 복사됨)")
+                miss = walk_policy.missing_deps()
+                if miss:
+                    raise RuntimeError(f"Radxa에 없는 패키지: {', '.join(miss)} (README 12절 설치)")
+                if not walk_policy.policy_files_ok():
+                    raise RuntimeError("Radxa에 정책 파일이 없습니다 (policies/real_walk)")
+                if self.policy_active():
+                    raise RuntimeError("이미 정책 보행 중입니다")
+                if self.policy_imu is None:
+                    raise RuntimeError("IMU 값이 없습니다 (IMU가 '받는 중'이어야 함)")
+                run = walk_policy.PolicyRun(self, d, self.policy_report)
+                with self.policy_lock:
+                    if self.client is None or self.tripped:
+                        raise RuntimeError("GUI 연결이 끊겼거나 감시가 걸린 상태입니다")
+                    self.policy = run
+                self.policy_report({"type": "started", "log": run.log_path,
+                                    "torque_clamp": bool(d.get("torque_clamp", True))})
+                run.start()
+            elif p is None or not p.active:
+                if cmd == "stop":
+                    return
+                raise RuntimeError("정책 보행 중이 아닙니다")
+            elif cmd == "floor":
+                p.floor_ev.set()
+                self.policy_report({"type": "floor"})
+            elif cmd == "command":
+                v = [float(x) for x in d.get("v", [0.0, 0.0, 0.0])][:3]
+                if len(v) == 3 and all(math.isfinite(x) for x in v):
+                    p.command = v
+            elif cmd == "stop":
+                self.stop_policy(str(d.get("why") or "GUI에서 멈춤"))
+            else:
+                raise RuntimeError(f"모르는 정책 명령: {cmd!r}")
+        except Exception as e:  # noqa: BLE001 - 시작 실패 이유를 GUI에 보여 줌
+            self.policy_report({"type": "error", "msg": f"{type(e).__name__}: {e}" if not isinstance(
+                e, RuntimeError) else str(e)})
 
     def send_client(self, typ, payload):
         c = self.client
@@ -370,6 +473,11 @@ class Bridge:
         self.counts["rx_can"] += 1
         if not flags & F_EXT:
             self.seen[bus].add(can_id >> 5)
+            if can_id & 0x1F == 0x001 and dlc >= 5 and not flags:     # heartbeat: 정책 보행의 오류 확인용
+                self.hb[can_id >> 5] = (time.monotonic(), struct.unpack_from("<I", data, 0)[0], data[4])
+        p = self.policy
+        if p is not None and p.active:
+            p.io.on_frame(bus, can_id, flags, dlc, data)
         c = self.client
         if c is not None:
             try:
@@ -409,6 +517,7 @@ class Bridge:
         while not self.stop.wait(0.05):
             if self.client is not None and not self.tripped and time.monotonic() - self.last_rx > self.watchdog_s:
                 self.tripped = True
+                self.stop_policy(f"GUI에서 {self.watchdog_s:g} s 동안 아무것도 안 옴")
                 n = self.idle_all(f"GUI에서 {self.watchdog_s:g} s 동안 아무것도 안 옴")
                 c = self.client
                 if c is not None:
@@ -431,7 +540,9 @@ class Bridge:
         self.tripped = False
         info = {"version": VERSION, "bitrate": self.bitrate, "watchdog_s": self.watchdog_s, "host": socket.gethostname(),
                 "buses": [{"name": d.name, "kind": d.kind, "serial": d.serial} for d in self.devices],
-                "imu": os.path.exists(IMU_READER)}
+                "imu": os.path.exists(IMU_READER),
+                "policy": None if walk_policy is None else {"files": walk_policy.policy_files_ok(),
+                                                            "missing": walk_policy.missing_deps()}}
         cl.send_msg(T_INFO, json.dumps(info).encode())
         log(f"GUI 연결됨 (버스 {len(self.devices)}개)")
         try:
@@ -441,6 +552,13 @@ class Bridge:
                     self.tripped = False
                 if typ == T_FRAME and len(payload) == FRAME.size:
                     bus, flags, dlc, can_id, data = FRAME.unpack(payload)
+                    # GUI의 IDLE(Esc·모두 힘 풀기·보호 정지)은 정책보다 우선: 먼저 정책을 멈추고(목표 전송·enable 막힘)
+                    # 그 IDLE을 보낸다. 힘 풀기 자체는 GUI가 보내는 IDLE 프레임들이 한다
+                    if (not flags and can_id & 0x1F == SET_AXIS_STATE and dlc >= 4
+                            and struct.unpack_from("<I", data, 0)[0] == STATE_IDLE and self.policy_active()):
+                        with self.policy_lock:
+                            if self.policy is not None and not self.policy.stop_ev.is_set():
+                                self.policy.stop("GUI에서 힘 풀기 (IDLE)")
                     if bus < len(self.devices):
                         if not flags & F_EXT:
                             self.seen[bus].add(can_id >> 5)
@@ -455,6 +573,9 @@ class Bridge:
                     cl.send_msg(T_PONG, payload)
                 elif typ == T_IMU_CMD:
                     threading.Thread(target=self.imu_command, args=(payload,), daemon=True, name="imu-cmd").start()
+                elif typ == T_POLICY_CMD:
+                    threading.Thread(target=self.policy_command, args=(payload,), daemon=True,
+                                     name="policy-cmd").start()
         except OSError:
             pass
         finally:
@@ -465,6 +586,7 @@ class Bridge:
             except OSError:
                 pass
             log("GUI 연결 끊김")
+            self.stop_policy("GUI 연결 끊김")
             self.idle_all("GUI 연결 끊김")
             self.imu.stop()
 
@@ -594,6 +716,7 @@ def main():
     except KeyboardInterrupt:
         pass
     finally:
+        br.stop_policy("중계 끝남")
         br.idle_all("중계 끝남")
         br.imu.stop()
         br.close()

@@ -461,6 +461,8 @@ class WalkTest:
         out = []
         if self.active:
             out.append("이미 보행 테스트 중입니다")
+        if getattr(app, "policy", None) is not None and app.policy.active:
+            out.append("정책 보행 중입니다 ('정책 보행' 탭)")
         missing = [app.cfg.joint(n).short for n in app.cfg.names if app.infos.get(n) is None]
         if missing:
             out.append("시뮬 모델에 없는 관절: " + ", ".join(missing))

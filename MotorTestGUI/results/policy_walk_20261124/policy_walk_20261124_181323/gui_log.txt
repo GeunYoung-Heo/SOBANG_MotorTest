@@ -1,0 +1,16 @@
+   140.666 [GUI] 정책 보행: 시작 요청 (앞으로 0.20 m/s, 토크 한계 6 N·m 켬 (Radxa 목표 자르기)): L hip roll 부호 -1 영점 -0.4764, L hip yaw 부호 -1 영점 0.2441, L hip pitch 부호 -1 영점 0.8354, L knee pitch 부호 -1 영점 -0.3998, L ankle pitch 부호 -1 영점 1.9838, L ankle roll 부호 -1 영점 0.2539, R hip roll 부호 -1 영점 0.0262, R hip yaw 부호 -1 영점 0.3778, R hip pitch 부호 -1 영점 0.8512, R knee pitch 부호 -1 영점 -0.0147, R ankle pitch 부호 -1 영점 0.8108, R ankle roll 부호 -1 영점 -0.0675
+   141.083 [GUI] 정책 보행: Radxa에서 시작: 서기 자세로 4 s 이동
+   141.083 [CAN] [Radxa] [bridge] 정책 보행: {'type': 'started', 'log': '/home/radxa/motor_bridge/logs/real_walk_20261124_181323.npz', 'torque_clamp': True}
+   145.257 [GUI] 정책 보행: 서기 자세 도달, 유지 중 (발이 바닥에 닿으면 '정책 켜기')
+   182.614 [GUI] 정책 보행: 정책 켜기 (발이 바닥에 닿음)
+   182.684 [GUI] 정책 보행: 정책 보행 시작
+   183.481 [CAN] [Radxa] stopped: tilt 20.2 deg; log -> /home/radxa/motor_bridge/logs/real_walk_20261124_181323.npz
+   183.555 [GUI] 정책 보행: 목표를 자른 주기 17 / 2110
+   183.555 [CAN] [Radxa] [bridge] 정책 보행: {'type': 'stopped', 'reason': 'tilt 20.2 deg', 'log': '/home/radxa/motor_bridge/logs/real_walk_20261124_181323.npz', 'log_size': 1642130, 'io_log': '/home/radxa/motor_bridge/logs/real_walk_20261124_181323_io.npz', 'clamp_cycles': 17, 'sent': 2110}
+   183.556 [GUI] 정책 보행: 멈춤: tilt 20.2 deg
+   184.249 [CAN] ⚠ Radxa: 버스 2 (ttyACM1) 수신 중단: 장치가 닫힘
+   184.249 [CAN] [Radxa] [bridge] 버스 2 (ttyACM1) 수신 중단: 장치가 닫힘
+   184.252 [CAN] ⚠ Radxa: 버스 2 송신 실패: [Errno 5] Input/output error
+   184.414 [GUI] 정책 보행: Radxa 기록 → logs/policy_walk_20261124_181323/real_walk.npz (1603 KB) + real_walk_io.npz
+   184.487 [CAN] ⚠ Radxa: 버스 2 송신 실패: [Errno 5] Input/output error
+   184.736 [CAN] ⚠ Radxa: 버스 2 송신 실패: [Errno 5] Input/output error

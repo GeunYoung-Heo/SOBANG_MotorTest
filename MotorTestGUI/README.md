@@ -607,6 +607,118 @@ GUI는 로봇에 달린 BMI088만 씁니다 (센서 선택 없음). 기본값: `
 
 ---
 
+## 12. 정책 보행 (강화학습 정책으로 실물 보행 시험)
+
+SOBANG_Locomotion의 실물 보행 정책 `policies/real_walk`(Velocity-ASMR-Biped-Real-v0, 2026-11-23 학습)를 로봇에서 돌립니다. 시험 절차와 학습 전제는 RL 세션의 절차서 페이지("첫 실물 보행 시험")에 있습니다.
+
+### 어떻게 도나
+
+- 정책과 50 Hz 루프는 **Radxa에서** 돕니다. CAN 중계(`radxa/can_bridge.py`)가 RL 세션의 `run_walk_test()`(`radxa/real_walk_loop.py`, 고치지 않은 사본)를 스레드로 돌리고, `radxa/walk_policy.py`가 그 함수가 쓰는 CAN 읽기·쓰기와 IMU를 중계 위에 구현합니다. 노트북을 거치지 않아 지연이 작습니다 (IMU 200 Hz를 바로 씀).
+- GUI는 관절 변환값(정책 순서, 부호 = 설정의 방향, 영점 = zero_turn − k)과 옵션을 보내고, 상태(10 Hz)를 받아 보여 주고 기록합니다. 정책 목표는 3D에 주황 반투명, 그래프에 주황 점선으로 나옵니다.
+- 관측·행동은 RL 코드 그대로입니다: 관측 45개(명령 3, 몸통 각속도 3, 중력 방향 3, 관절 각 − 서기 자세 12, 관절 속도 12, 직전 행동 12), 목표 = 서기 자세 + 0.25 × clip(행동, ±20), Set Input Pos의 vel_ff·torque_ff = 0.
+- 2026-11-24 확인: GUI의 MJCF와 정책 학습 MJCF는 관절 12개의 축 방향·범위가 같습니다. 그래서 '영점·방향 설정' 탭에서 '실물로 확인함'까지 마친 방향이 정책의 부호와 같습니다.
+
+### Radxa 준비 (이 로봇은 2026-11-24에 마침)
+
+- onnxruntime 1.22.1을 radxa 계정에 설치했습니다 (인터넷이 없어 노트북에서 받은 aarch64 wheel로). PyYAML 6.0과 numpy 1.24.2는 원래 있었습니다.
+- 점검 (모터 없이). PowerShell에서:
+
+```powershell
+ssh radxa "cd ~/motor_bridge && python3 walk_policy.py"
+```
+
+  `"ok": true`(학습 PC 기준 출력과 차이 1e-3 미만)여야 합니다. 2026-11-24: 차이 4.3e-6, 한 스텝 0.81 ms (p99 0.99 ms). `~/motor_bridge/`의 파일은 GUI가 Radxa 경유로 연결할 때마다 새로 복사합니다.
+
+### 시험 전에
+
+- 12개 관절 영점과 방향 '실물로 확인함', IMU 축 `+y -x +z` (11절).
+- CANable 두 개를 Radxa USB에, IMU를 Radxa에. 로봇은 하네스에 걸고, 전원 차단 스위치 담당 한 명.
+- 무릎 영점 주의: 2026-11-20 기준 무릎이 영점보다 약 2.5° 더 펴진 자리에서 쉽니다. 정책은 관절마다 영점 오차 ±2°까지 학습했습니다.
+
+### 순서 (PowerShell)
+
+1. GUI를 켭니다.
+
+```powershell
+& "$env:USERPROFILE\odrv051\Scripts\Activate.ps1"
+cd "$env:USERPROFILE\Desktop\ASMR_ActuatorTest\MotorTestGUI"
+python motor_test_gui.py
+```
+
+2. 위쪽 **Radxa 경유** 를 켜고 **연결**. 노드 12개가 초록이 되고, IMU가 '받는 중'이 될 때까지 (처음 2초는 로봇을 가만히) 기다립니다.
+3. 오른쪽 **정책 보행** 탭. 상태 줄에 "시작 준비 완료"가 나와야 합니다. ⚠ 줄이 있으면 그것부터 해결합니다 (토크가 켜진 관절이 있으면 Esc로 모두 힘 풀기).
+4. **▶ 보행 시작 (서기 자세로)** → 확인. 로봇이 4초 동안 서기 자세(고관절 ±14.1°, 무릎 ∓22.9°, 발목 ±8.8°)로 움직이고 유지합니다. 각 관절이 목표의 1° 안인지, 좌우가 대칭인지 봅니다 (RL 절차서 S2).
+5. **앞으로 걷는 속도**를 정합니다 (기본 0.10 m/s, 0~0.5). GUI는 **앞으로만** 걷게 합니다: 옆걸음·회전은 0이고 뒤로 걷기는 없습니다 (2026-11-24 사용자 요청).
+6. 하네스를 내려 발이 바닥에 닿으면 바로 **정책 켜기 (발 닿은 뒤)** (S3·S4). 켜는 순간부터 정한 속도로 앞으로 걷습니다. 걷는 중에 **제자리 0**, **0.1**, **0.2**, **0.3** 버튼이나 속도 칸으로 바꾸면 바로 적용됩니다. RL 절차서는 0.1 → 0.2 → 0.3을 각 10초씩, 사이마다 0으로 멈춰 서는지 보라고 합니다.
+7. 끝낼 때: **■ 멈춤 · 힘 풀기** 또는 **Esc**. 모든 관절의 힘이 바로 풀립니다 (하네스가 받침).
+
+### 멈추는 경우
+
+- **Esc / 모두 힘 풀기 / 멈춤 버튼 / 관절 '힘 풀기':** GUI가 멈춤 명령과 IDLE을 보냅니다. 중계는 GUI에서 온 IDLE 프레임만 봐도 정책을 멈춥니다 (목표 전송과 다시 켜기가 막힘). PC 시험에서 Esc 뒤 0.1초 안에 12개 모두 IDLE이었습니다.
+- **Radxa가 스스로 멈춤:** 정책 중 몸통 기울기 20° 초과, 드라이버 axis_error, 위치 제어가 아닌 관절, heartbeat 0.5초 끊김, 엔코더 응답 5주기 연속 없음, IMU 값 0.1초 끊김, 10 ms 넘게 늦은 주기 5번 연속.
+- **GUI 연결 문제:** GUI가 0.5초 조용하거나 연결이 끊기면 중계가 정책을 멈추고 모두 IDLE.
+- 멈춘 이유는 탭의 상태 줄과 '기록' 탭에 나옵니다.
+
+### 토크 한계
+
+- 정책은 관절 토크 6 N·m 한계로 학습했습니다. 드라이버는 18 A(무릎·고관절 약 18 N·m, 발목 약 23 N·m)까지 냅니다.
+- **CAN으로는 전류 한계를 바꿀 수 없습니다.** 2026-11-24 첫 실물 시험에서 CAN 명령 0x00F(Set Limits)로 6 N·m에 맞춘 전류 한계를 보냈지만, Iq 명령이 원래 한계 18.00 A까지 나왔습니다. 이 펌웨어(ODrive 0.5.1)의 0x00F는 vel_limit만 바꿉니다. 그 결과 무릎은 정책 시간의 약 40 %에서 6 N·m를 넘었고, 발목은 22~23 N·m까지 썼습니다. 12 A SMPS가 과부하로 출력을 끊어 두 번 모든 드라이버가 `DC_BUS_UNDER_VOLTAGE`로 멈췄습니다.
+- 그래서 **토크 한계 6 N·m (Radxa가 목표를 잘라서)** 체크박스(기본 켬)를 둡니다. Radxa가 20 ms마다 목표를 보내기 직전에, 드라이버 PD 토크 Kp·(목표 − 각도) − Kd·속도가 ±6 N·m 안에 들도록 관절마다 목표를 자릅니다. 각도·속도는 그 주기에 읽은 값이고, Kp·Kd는 `policy.yaml`의 joint_kp·joint_kd(= 드라이버 게인)입니다.
+- 근사입니다: 다음 목표까지 20 ms 동안은 드라이버가 같은 목표로 PD를 계속 돌리므로, 그 사이 관절이 밀리면(발 착지 등) 잠깐 6 N·m를 넘을 수 있습니다. 정확한 한계가 필요하면 USB로 `torque_lim`을 넣어야 합니다 (드라이버 분해 필요).
+- 끄면 드라이버 한계 18 A까지 나옵니다. 시작할 때 값으로 정해지고, 정책 보행 중에는 바꿀 수 없습니다. 탭 상태 줄에 그 주기에 잘린 관절 수와 누적 비율이 나옵니다.
+- PC 시험 (2026-11-24): 켬이면 보낸 목표의 PD 토크가 매 주기 최대 6.00 N·m, 끔이면 목표가 그대로 감.
+- 회생 전류 한계는 −3 A 그대로입니다. 걷다가 `DC_BUS_OVER_REGEN_CURRENT`로 드라이버가 꺼지면 HW팀과 상의합니다 (RL 절차서 2절).
+
+### 다른 기능과의 관계
+
+- 정책 보행 중에는 관절별 명령·영점 변경·규칙 기반 보행 테스트가 막힙니다. GUI의 추종 오차 보호(10°·0.5 s)는 정책 목표에는 걸리지 않습니다 (RL 절차서 5-4: 정책은 목표를 크게 앞서 줌). 대신 Radxa의 안전 정지와 Esc를 씁니다.
+- 정책 중에는 GUI가 엔코더를 따로 요청하지 않고 Radxa 루프의 요청에 대한 응답을 받아 보여 줍니다 (버스 부하를 두 배로 늘리지 않음).
+
+### 기록
+
+`MotorTestGUI/logs/policy_walk_날짜_시각/`
+
+| 파일 | 내용 |
+|---|---|
+| `real_walk.npz` | Radxa의 run_walk_test 기록 (끝날 때 가져옴): 매 주기 time, state(0 이동, 1 유지, 2 정책), command, observation 45, action 12, target 12, pos_turns, vel_turns, quat, gyro, loop_ms, 멈춘 이유, signs, zero_turns. 학습 PC 세션에 넘깁니다 |
+| `real_walk_io.npz` | Radxa가 실제로 보낸 목표 (같은 Radxa 기록 이름 + `_io`, 끝날 때 가져옴): `target_raw`(정책 목표, rad), `target_sent`(자른 뒤 보낸 목표, rad), `clamped`(관절별 잘림), `t_send`(보낼 때마다)·`t_read`(엔코더 읽을 때마다, perf_counter 절대값), `pre_loop`(루프 전 첫 전송 = 지금 자세 유지), `torque_clamp`, `limit_nm`, `kp`, `kd`, `joints`. `real_walk.npz`의 `target`은 자르기 전 정책 목표입니다 |
+| `status.csv` | GUI가 받은 상태 10 Hz: 단계, 주기, 엔코더 읽기 시간, 기울기, IMU 나이, 명령, 토크 한계 켬/끔, 그 주기 잘린 관절 수, 누적 잘림 비율, 엔코더 놓침, 보낸 목표 12개 |
+| `events.txt` | 시작(관절별 부호·영점), 단계 변화, 명령 변경, 멈춘 이유. 줄마다 노트북 시각과 `t_gui`(GUI 시계) |
+| `meta.json` | 관절 변환값, 서기 자세, 옵션, Radxa 정보, IMU 축, 시작 시각(ms)과 그때의 `t_gui`, `torque_clamp`(켬이면 {method: radxa_target, limit_nm: 6.0, kp, kd}, 끔이면 null) |
+| `gui_frames.csv` | 정책 중(멈춘 뒤 2초까지) GUI가 받은 CAN 값: 엔코더 응답(50 Hz × 12), Iq 명령·측정(관절마다 10 Hz, **GUI에서 선택한 관절은 50 Hz**), heartbeat(상태·axis_error), Vbus(2초마다), motor·encoder 에러. GUI가 원래 요청하던 것만 남기고 새 요청은 보내지 않습니다 |
+| `gui_log.txt` | GUI '기록' 탭의 줄 (GUI·CAN·`[Radxa]`), 시작 2초 전부터 |
+
+Radxa에도 `~/motor_bridge/logs/real_walk_날짜_시각.npz`가 남습니다 (Radxa 시계가 틀릴 수 있어 이름은 노트북 시각).
+
+### 기록 분석
+
+`analysis/policy_walk_report.py`가 기록 폴더를 읽어 보고서와 그림을 만듭니다 (numpy, matplotlib만 씀; 정책 재생은 `analysis/onnx_numpy.py`가 onnxruntime 없이 계산). PowerShell에서:
+
+```powershell
+& "$env:USERPROFILE\odrv051\Scripts\Activate.ps1"
+cd "$env:USERPROFILE\Desktop\ASMR_ActuatorTest\MotorTestGUI"
+python analysis\policy_walk_report.py --list                 # 기록 목록과 한 줄 요약
+python analysis\policy_walk_report.py                        # 가장 최근 기록
+python analysis\policy_walk_report.py logs\policy_walk_20261125_101500
+python analysis\policy_walk_report.py --fetch logs\policy_walk_20261125_101500   # real_walk.npz가 없으면 Radxa에서 가져옴
+```
+
+결과는 기록 폴더의 `analysis\`에 `report.md`(한눈에 보는 판정 + 절별 표), `summary.json`, 그림(`overview`, `joints`, `torque`, `last_seconds`, `spectrum`)으로 남습니다. 판정 기준은 RL 절차서(S2 서기 자세 1°, S3 기울기 5°·6 N·m 1초 연속, 주기 30 ms)와 절차서에 적힌 시뮬 보행 값(목표−실제 상위 1 % 23°, 최대 50°, 12° 초과 최장 0.26초, 관절 속도 11 rad/s)입니다. 보는 것: 단계별 시간과 멈춘 이유, 주기·읽기 시간·엔코더 정체 응답·IMU 멈칫, IMU 기울기와 자이로↔쿼터니언 일관성, 서기 자세 오차와 좌우 대칭, 정책 중 관절 추종 오차·PD 토크 추정·포화·범위 끝 여유·속도, 관측 45개 조립 점검과 정책 재생, 행동 잘림·떨림(8 Hz 위)·주 진동수, Iq 실측 vs PD 토크·전류 한계·heartbeat 상태 변화·에러 이름·Vbus, 멈추기 직전 2초.
+
+### PC에서 한 시험 (2026-11-24)
+
+한 프로세스에 가상 로봇(MuJoCo, 가상 CAN 버스 2개) + 중계(정책 실행기, 가짜 IMU) + GUI를 띄워 21개 항목을 확인했습니다: 시작 점검(토크 켜진 관절이 있으면 막힘), 4.0초 만에 서기 자세 (모든 관절 0.8° 안), 정책 켜기와 명령 전달, 주기 중앙값 20.00 ms, 토크 한계 목표 자르기(켬: 보낸 목표의 PD 토크 최대 6.00 N·m, 끔: 그대로), Esc 뒤 0.1초 안에 모두 IDLE·다시 켜지지 않음, 기록 가져오기. 실물 첫 시험(2026-11-24)에서 걷기는 했고, 위 '토크 한계'의 문제를 찾았습니다.
+
+### 2026-11-24 실물 결과
+
+- 자르기 끔: 4~12초 걸었고, 앞으로 12~15° 숙였습니다. vx 0.2에서는 SMPS가 두 번 무너졌습니다.
+- 6 N·m 목표 자르기 켬: 정책을 켜고 0.7~0.8초 만에 앞으로 20°를 넘어 Radxa가 멈췄습니다.
+- 기록 8개, 표, 자르기 방식, 강화학습 세션에 부탁한 시뮬 시험은 [`results/policy_walk_20261124/README.md`](results/policy_walk_20261124/README.md)에 있습니다.
+
+같은 날 `gui_frames.csv`·`gui_log.txt`를 넣은 뒤 다시 돌려 23개 항목 통과 (CAN 요청 종류·개수는 그대로). 분석 도구로 본 가상 로봇 기록: 엔코더 응답이 npz 값과 정확히 맞아 시각 차이 ±1 ms, Iq로 계산한 토크 ÷ PD 추정 토크 기울기 0.9–1.15, PC 정책 재생과 Radxa 행동 차이 4×10⁻⁷. 고장을 넣은 가짜 기록(기울기 정지, 무릎 6 N·m 2.6초 포화, 엔코더 4주기 정체, 50 ms 주기, MOTOR_FAILED, DC_BUS_OVER_REGEN_CURRENT, 전류 한계 미적용, 발목 떨림, 관절 속도 단위 오류, 주기 0개, npz 없음)은 모두 판정에 잡혔습니다.
+
+---
+
 ## 파일
 
 | 파일 | 내용 |
@@ -614,12 +726,17 @@ GUI는 로봇에 달린 BMI088만 씁니다 (센서 선택 없음). 기본값: `
 | `motor_test_gui.py` | 실행 파일 |
 | `fetch_model.py` | 수업 로봇 모델 내려받기 |
 | `config/robot_config.json` | CAN 포트 1·2와 속도, 관절 설정(node, 방향, 영점, 토크 부호, 기구 끝, 이동 제한). 처음 저장할 때 생김 |
-| `motorgui/` | 프로그램 코드 (CAN 통신, 시뮬, 화면, 보행 테스트 `walk.py`, Radxa 경유 `radxa_link.py`, IMU 자세 `imu.py`) |
-| `radxa/can_bridge.py` | Radxa에서 도는 CAN 중계 프로그램 (표준 라이브러리만). IMU 프로그램도 띄움. 연결할 때 GUI가 Radxa `~/motor_bridge/`에 복사함 |
+| `motorgui/` | 프로그램 코드 (CAN 통신, 시뮬, 화면, 보행 테스트 `walk.py`, Radxa 경유 `radxa_link.py`, IMU 자세 `imu.py`, 정책 보행 `policy_walk.py`) |
+| `radxa/can_bridge.py` | Radxa에서 도는 CAN 중계 프로그램 (표준 라이브러리만). IMU 프로그램을 띄우고, 정책 보행을 스레드로 돌림. 연결할 때 GUI가 Radxa `~/motor_bridge/`에 복사함 |
+| `radxa/walk_policy.py` | 정책 보행 (12절): RL 세션의 run_walk_test()에 CAN 읽기·쓰기와 IMU를 연결. `python3 walk_policy.py`로 정책 점검 |
+| `radxa/real_walk.py`, `radxa/real_walk_loop.py`, `radxa/policies/real_walk/` | SOBANG_Locomotion 사본 (커밋 ceadf29, 고치지 않음): 정책·관측·행동 변환, 50 Hz 루프, 정책 파일 |
+| `results/policy_walk_20261124/` | 2026-11-24 실물 정책 보행 기록 8개와 강화학습 세션용 설명 |
 | `radxa/imu_reader.py` | Radxa에서 IMU(BMI088 / IM10A / 가짜)를 읽어 몸통 자세·각속도를 냄 (11절). 혼자 실행해도 됨 |
 | `radxa/bmi088.py` | BMI088 드라이버 + Mahony 자세 필터. 학습 레포 사본 (커밋 db6d83a + 소프트 리셋 NACK 무시 한 곳) |
 | `radxa/latency_test.py` | Radxa에서 도는 지연 측정 도구 (10절). `latency/latency.py`가 Radxa `~/motor_latency/`에 복사함 |
 | `latency/latency.py` | 지연 실험 실행·분석 (PC) |
 | `latency/fit_inertia.py` | 계단 기록으로 관절 관성·armature 맞춤 (오프라인) |
+| `analysis/policy_walk_report.py` | 정책 보행 기록 분석 (12절 '기록 분석'): 보고서·요약·그림을 기록 폴더의 `analysis\`에 |
+| `analysis/onnx_numpy.py` | 정책 ONNX(Gemm·Elu MLP)를 numpy로 계산 (onnxruntime 없이 기록 재생) |
 | `logs/` | 보행 테스트 기록 (실행마다 폴더 하나, git에 안 올림) |
 | `assets/` | 수업 로봇 모델 (git에 안 올림) |

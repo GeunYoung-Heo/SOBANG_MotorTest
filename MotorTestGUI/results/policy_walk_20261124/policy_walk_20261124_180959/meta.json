@@ -1,0 +1,175 @@
+{
+ "start": "2026-11-24T18:09:59",
+ "start_ms": "2026-11-24T18:09:59.724",
+ "t_gui_at_start_ms": 67.332,
+ "policy": "SOBANG_Locomotion policies/real_walk",
+ "command_at_start": [
+  0.1,
+  0.0,
+  0.0
+ ],
+ "gui_selected_node": 1,
+ "torque_limit_6Nm": true,
+ "torque_clamp": {
+  "method": "radxa_target",
+  "limit_nm": 6.0,
+  "kp": [
+   100.6185507974117,
+   100.6185507974117,
+   100.6185507974117,
+   100.6185507974117,
+   71.6197243913529,
+   71.6197243913529,
+   100.6185507974117,
+   100.6185507974117,
+   100.6185507974117,
+   100.6185507974117,
+   71.6197243913529,
+   71.6197243913529
+  ],
+  "kd": [
+   7.985599269635849,
+   7.985599269635849,
+   7.985599269635849,
+   7.985599269635849,
+   3.580986219567645,
+   3.580986219567645,
+   7.985599269635849,
+   7.985599269635849,
+   7.985599269635849,
+   7.985599269635849,
+   3.580986219567645,
+   3.580986219567645
+  ]
+ },
+ "drive_current_lim_A": 18.0,
+ "joints": [
+  {
+   "name": "leg_left_hip_roll_joint",
+   "node": 1,
+   "bus": 0,
+   "sign": -1,
+   "zero_turns": -0.3347053825855255
+  },
+  {
+   "name": "leg_left_hip_yaw_joint",
+   "node": 3,
+   "bus": 0,
+   "sign": -1,
+   "zero_turns": 0.12180519104003906
+  },
+  {
+   "name": "leg_left_hip_pitch_joint",
+   "node": 5,
+   "bus": 0,
+   "sign": -1,
+   "zero_turns": 0.6859464645385742
+  },
+  {
+   "name": "leg_left_knee_pitch_joint",
+   "node": 7,
+   "bus": 0,
+   "sign": -1,
+   "zero_turns": -0.33911043405532837
+  },
+  {
+   "name": "leg_left_ankle_pitch_joint",
+   "node": 11,
+   "bus": 0,
+   "sign": -1,
+   "zero_turns": 2.293672561645508
+  },
+  {
+   "name": "leg_left_ankle_roll_joint",
+   "node": 13,
+   "bus": 0,
+   "sign": -1,
+   "zero_turns": 0.3329343795776367
+  },
+  {
+   "name": "leg_right_hip_roll_joint",
+   "node": 2,
+   "bus": 1,
+   "sign": -1,
+   "zero_turns": 0.03335762023925781
+  },
+  {
+   "name": "leg_right_hip_yaw_joint",
+   "node": 4,
+   "bus": 1,
+   "sign": -1,
+   "zero_turns": 0.19890880584716797
+  },
+  {
+   "name": "leg_right_hip_pitch_joint",
+   "node": 6,
+   "bus": 1,
+   "sign": -1,
+   "zero_turns": 0.8409461975097656
+  },
+  {
+   "name": "leg_right_knee_pitch_joint",
+   "node": 8,
+   "bus": 1,
+   "sign": -1,
+   "zero_turns": 0.04351234436035156
+  },
+  {
+   "name": "leg_right_ankle_pitch_joint",
+   "node": 12,
+   "bus": 1,
+   "sign": -1,
+   "zero_turns": 0.49915409088134766
+  },
+  {
+   "name": "leg_right_ankle_roll_joint",
+   "node": 14,
+   "bus": 1,
+   "sign": -1,
+   "zero_turns": 0.05095100402832031
+  }
+ ],
+ "standing_pose_rad": [
+  0.0,
+  0.0,
+  0.2457719,
+  -0.4,
+  0.1542281,
+  0.0,
+  0.0,
+  0.0,
+  -0.2457719,
+  0.4,
+  -0.1542281,
+  0.0
+ ],
+ "radxa": {
+  "version": "2026-11-23",
+  "bitrate": 500000,
+  "watchdog_s": 0.5,
+  "host": "rock-3c",
+  "buses": [
+   {
+    "name": "ttyACM0",
+    "kind": "slcan",
+    "serial": "206237884845"
+   },
+   {
+    "name": "ttyACM2",
+    "kind": "slcan",
+    "serial": "2062376C4845"
+   }
+  ],
+  "imu": true,
+  "policy": {
+   "files": true,
+   "missing": []
+  }
+ },
+ "imu_axes": [
+  "+y",
+  "-x",
+  "+z"
+ ],
+ "imu_bus": 3
+}

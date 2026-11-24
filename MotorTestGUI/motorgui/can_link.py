@@ -105,6 +105,10 @@ class CanLink:
         self.radxa = None                 # Radxa 경유일 때 RadxaConnection (왕복 시간 등)
         self.imu = ImuFeed()              # IMU 값 (Radxa의 imu_reader.py 또는 가상 IMU가 채움)
         self._fake_imu = None
+        self.passive_encoder = False      # 정책 보행 중: Radxa 루프가 엔코더를 요청하므로 GUI는 요청하지 않고 응답만 받음
+        self.policy_handler = None        # Radxa의 정책 보행 메시지 → PolicyWalk.on_message
+        self.frame_tap = None             # 정책 보행 기록: 받은 프레임마다 tap(t, node, cmd, data) (FrameRecorder.tap)
+        self.on_closed = None             # 연결이 끝나면 부름 (정책 보행 상태 정리)
         self._q = queue.Queue()
         self._thread = None
         self._stop = threading.Event()
@@ -250,7 +254,9 @@ class CanLink:
         imu_on = self.cfg.imu_sensor != "none"
         # IMU를 쓰면 CANable이 없어도 연결한다 (IMU 축 점검만 할 때). 명령할 관절이 없으니 안전에는 상관없음
         conn = RadxaConnection(host, bitrate, log=self.log, extra_args="--allow-empty" if imu_on else "",
-                               imu_feed=self.imu).start()
+                               imu_feed=self.imu)
+        conn.policy_handler = self.policy_handler
+        conn.start()
         buses = conn.buses()
         if not buses and not imu_on:
             conn.close()
@@ -352,6 +358,12 @@ class CanLink:
                 self.radxa = None
             self._stop_virtual()
             self.imu.reset("off")
+            self.passive_encoder = False
+            if self.on_closed is not None:
+                try:
+                    self.on_closed()
+                except Exception:  # noqa: BLE001
+                    pass
             if self.state != "error":
                 self.state, self.message = "disconnected", "연결 끊음"
                 self.log("연결 끊음")
@@ -468,8 +480,9 @@ class CanLink:
         for ns in self.nodes.values():
             n = ns.node
             if ns.online(now):
-                ns._t_req = time.perf_counter()
-                ok &= self._rtr(n, cs.GET_ENCODER_ESTIMATES)
+                if not self.passive_encoder:       # 정책 보행 중에는 Radxa 루프의 요청에 대한 응답을 받음
+                    ns._t_req = time.perf_counter()
+                    ok &= self._rtr(n, cs.GET_ENCODER_ESTIMATES)
                 if n == sel or (tick + n) % 5 == 0:
                     self._rtr(n, cs.GET_IQ)
                 if (tick + 7 * n) % 100 == 0:
@@ -571,6 +584,13 @@ class CanLink:
                 self.unknown[node] = now
             return
         data = bytes(msg.data)
+        tap = self.frame_tap
+        if tap is not None:
+            try:
+                tap(now, node, cmd, data)
+            except Exception as e:  # noqa: BLE001 - 기록 문제로 CAN 수신이 멈추면 안 됨
+                self.frame_tap = None
+                self.log(f"정책 보행 프레임 기록 멈춤: {type(e).__name__}: {e}")
         if now - ns.last_seen() > NEW_SESSION_GAP:
             ns.new_session = True
             ns.state_checked = False

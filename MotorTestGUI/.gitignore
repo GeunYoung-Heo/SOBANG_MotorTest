@@ -3,3 +3,6 @@ assets/asmr2026-humanoid-v1/
 
 # 보행 테스트 기록 (실행마다 폴더 하나)
 logs/
+
+# 정책 보행: PC에서 중계를 시험할 때 생기는 Radxa 쪽 기록
+radxa/logs/

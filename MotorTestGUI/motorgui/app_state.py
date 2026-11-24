@@ -13,6 +13,7 @@ from .can_link import CanLink
 from .commander import Commander
 from .config import TURN_TO_JOINT_DEG
 from .imu import roll_pitch_yaw, tilt_data, tilt_matrix
+from .policy_walk import PolicyWalk
 from .sim import SimRobot, joint_infos, load_model
 from .walk import WalkTest
 from . import protocol as P
@@ -50,6 +51,9 @@ class App:
         self._follow = {}
         self._sim_hold = {}
         self.walk = WalkTest(self)             # 보행 테스트 (규칙 기반)
+        self.policy = PolicyWalk(self)         # 정책 보행 (Radxa에서 RL 정책)
+        self.link.policy_handler = self.policy.on_message
+        self.link.on_closed = self.policy.on_disconnect
         self.log(f"모델: {mjcf_path} ({self.model_note})")
         missing = [n for n, i in self.infos.items() if i is None]
         if missing:
@@ -114,12 +118,13 @@ class App:
         self.walk.update()
         t = self.now()
         # 실물 자세 (연결 안 된 관절은 0)
+        ptg = self.policy.target_q()            # 정책 보행 중이면 Radxa가 보낸 목표 (10 Hz)
         for name, info in self.infos.items():
             if info is None:
                 continue
             q = self.real_q(name)
             self.real_data.qpos[info.qadr] = 0.0 if q is None else q
-            tg = self.cmdr.target_q(name, t)
+            tg = self.cmdr.target_q(name, t) if ptg is None else ptg.get(name)
             self.target_data.qpos[info.qadr] = tg if tg is not None else (0.0 if q is None else q)
             self._follow[name] = q
             if q is not None:
@@ -221,9 +226,11 @@ class App:
         return self.send_real and self.link.connected
 
     def _walk_busy(self):
-        """보행 테스트 중이면 다른 명령을 막는 이유 문자열."""
+        """보행 테스트·정책 보행 중이면 다른 명령을 막는 이유 문자열."""
         if self.walk.active:
             return "보행 테스트 중입니다 ('보행 테스트' 탭의 '천천히 멈추기' 또는 Esc 모두 힘 풀기 후에)"
+        if self.policy.active:
+            return "정책 보행 중입니다 ('정책 보행' 탭의 멈춤 또는 Esc)"
         return None
 
     def enable(self, name):
@@ -266,7 +273,10 @@ class App:
         return None
 
     def idle_all(self, reason="모두 힘 풀기 (Esc / 빨간 버튼)"):
-        """모든 노드 IDLE + 모든 목표 지움. 보행 테스트 중이면 보행도 바로 끝난다 (IDLE을 먼저 보냄)."""
+        """모든 노드 IDLE + 모든 목표 지움. 보행 테스트·정책 보행 중이면 바로 끝난다.
+
+        정책 보행: 멈춤 명령을 먼저 보내고 IDLE을 보낸다. Radxa 중계는 GUI의 IDLE 프레임만 봐도 정책을 멈춘다."""
+        self.policy.on_idle_all(reason)
         if self.link.connected:
             self.link.send_idle_all()
         self.walk.on_idle_all(reason)

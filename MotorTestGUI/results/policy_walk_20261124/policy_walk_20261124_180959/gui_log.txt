@@ -1,0 +1,13 @@
+    67.335 [GUI] 정책 보행: 시작 요청 (앞으로 0.10 m/s, 토크 한계 6 N·m 켬 (Radxa 목표 자르기)): L hip roll 부호 -1 영점 -0.3347, L hip yaw 부호 -1 영점 0.1218, L hip pitch 부호 -1 영점 0.6859, L knee pitch 부호 -1 영점 -0.3391, L ankle pitch 부호 -1 영점 2.2937, L ankle roll 부호 -1 영점 0.3329, R hip roll 부호 -1 영점 0.0334, R hip yaw 부호 -1 영점 0.1989, R hip pitch 부호 -1 영점 0.8409, R knee pitch 부호 -1 영점 0.0435, R ankle pitch 부호 -1 영점 0.4992, R ankle roll 부호 -1 영점 0.0510
+    67.748 [GUI] 정책 보행: Radxa에서 시작: 서기 자세로 4 s 이동
+    67.748 [CAN] [Radxa] [bridge] 정책 보행: {'type': 'started', 'log': '/home/radxa/motor_bridge/logs/real_walk_20261124_180959.npz', 'torque_clamp': True}
+    71.922 [GUI] 정책 보행: 서기 자세 도달, 유지 중 (발이 바닥에 닿으면 '정책 켜기')
+   106.124 [GUI] 정책 보행: 멈춤 요청: 정책 보행 '멈춤' 버튼
+   106.125 [GUI] 모두 힘 풀기 (정책 보행 '멈춤' 버튼)
+   106.127 [CAN] 모든 노드 IDLE 명령 (12개, 버스 2개)
+   106.132 [CAN] [Radxa] [bridge] 모두 힘 풀기 (정책 멈춤: 정책 보행 '멈춤' 버튼): IDLE 프레임 25개
+   106.242 [CAN] [Radxa] stopped: stop requested; log -> /home/radxa/motor_bridge/logs/real_walk_20261124_180959.npz
+   106.310 [GUI] 정책 보행: 목표를 자른 주기 0 / 1914
+   106.311 [CAN] [Radxa] [bridge] 정책 보행: {'type': 'stopped', 'reason': "정책 보행 '멈춤' 버튼", 'log': '/home/radxa/motor_bridge/logs/real_walk_20261124_180959.npz', 'log_size': 1490038, 'io_log': '/home/radxa/motor_bridge/logs/real_walk_20261124_180959_io.npz', 'clamp_cycles': 0, 'sent': 1914}
+   106.334 [GUI] 정책 보행: 멈춤: 정책 보행 '멈춤' 버튼
+   107.197 [GUI] 정책 보행: Radxa 기록 → logs/policy_walk_20261124_180959/real_walk.npz (1455 KB) + real_walk_io.npz
