@@ -1,0 +1,30 @@
+    90.830 [GUI] 정책 보행: 시작 요청 (정책 real_clamp12, 앞으로 0.10 m/s, 토크 한계 12 N·m 켬 (Radxa 목표 자르기, 정책 학습 값), 정지: 기울기 30°·추종 오차 30° 0.5 s·Vbus 21.5 V): L hip roll 부호 -1 영점 -0.4764, L hip yaw 부호 -1 영점 0.2441, L hip pitch 부호 -1 영점 4.8354, L knee pitch 부호 -1 영점 -4.3998, L ankle pitch 부호 -1 영점 1.9838, L ankle roll 부호 -1 영점 0.2539, R hip roll 부호 -1 영점 -0.9738, R hip yaw 부호 -1 영점 0.3778, R hip pitch 부호 -1 영점 -3.1488, R knee pitch 부호 -1 영점 5.9853, R ankle pitch 부호 -1 영점 -1.1892, R ankle roll 부호 -1 영점 0.9325
+    91.272 [GUI] 정책 보행: Radxa에서 시작: 서기 자세로 4 s 이동 (정책 real_clamp12, 토크 한계 12 N·m, 기울기 정지 30.0°, 추종 오차 정지 30.0° 0.5 s)
+    91.274 [CAN] [Radxa] [bridge] 정책 보행: {'type': 'started', 'log': '/home/radxa/motor_bridge/logs/real_walk_20261125_110553_real_clamp12_12Nm.npz', 'policy': 'real_clamp12', 'torque_clamp': True, 'limit_nm': 12.0, 'trained_clamp': True, 'tilt_limit_deg': 30.0, 'track_limit_deg': 30.0, 'track_time_s': 0.5}
+    95.444 [GUI] 정책 보행: 서기 자세 도달, 유지 중 (발이 바닥에 닿으면 '정책 켜기')
+   104.070 [GUI] 정책 보행: 앞으로 걷는 속도 0.05 m/s
+   104.349 [GUI] 정책 보행: 앞으로 걷는 속도 0.00 m/s
+   104.827 [GUI] 정책 보행: 앞으로 걷는 속도 0.05 m/s
+   104.876 [GUI] 정책 보행: 앞으로 걷는 속도 0.10 m/s
+   104.956 [GUI] 정책 보행: 앞으로 걷는 속도 0.15 m/s
+   188.504 [GUI] 정책 보행: 앞으로 걷는 속도 0.10 m/s
+   194.190 [GUI] 정책 보행: 정책 켜기 (발이 바닥에 닿음, IMU 앞 숙임 +1.7° 오른쪽 -0.0°)
+   194.281 [GUI] 정책 보행: 정책 보행 시작
+   217.595 [GUI] 정책 보행: 멈춤 요청: 모두 힘 풀기 (Esc / 빨간 버튼)
+   217.596 [GUI] 모두 힘 풀기 (Esc / 빨간 버튼)
+   217.598 [CAN] 모든 노드 IDLE 명령 (12개, 버스 2개)
+   217.606 [CAN] [Radxa] [bridge] 모두 힘 풀기 (정책 멈춤: 모두 힘 풀기 (Esc / 빨간 버튼)): IDLE 프레임 34개
+   217.889 [CAN] [Radxa] stopped: stop requested; log -> /home/radxa/motor_bridge/logs/real_walk_20261125_110553_real_clamp12_12Nm.npz
+   218.088 [CAN] ⚠ Radxa: 버스 1 송신 실패: [Errno 19] No such device
+   218.095 [CAN] ⚠ Radxa: 버스 1 (ttyACM0) 수신 중단: 장치가 닫힘
+   218.095 [CAN] [Radxa] [bridge] 버스 1 (ttyACM0) 수신 중단: 장치가 닫힘
+   218.114 [CAN] [Radxa] [bridge] 버스 2 (ttyACM1) 수신 중단: 장치가 닫힘
+   218.119 [CAN] ⚠ Radxa: 버스 2 (ttyACM1) 수신 중단: 장치가 닫힘
+   218.135 [GUI] 정책 보행: 목표를 자른 주기 223 / 6312, 추종 오차 최대 21.9°, 버스 전압 최저 23.47 V (node 7)
+   218.135 [CAN] [Radxa] [bridge] 정책 보행: {'type': 'stopped', 'reason': '모두 힘 풀기 (Esc / 빨간 버튼)', 'log': '/home/radxa/motor_bridge/logs/real_walk_20261125_110553_real_clamp12_12Nm.npz', 'log_size': 4902886, 'io_log': '/home/radxa/motor_bridge/logs/real_walk_20261125_110553_real_clamp12_12Nm_io.npz', 'clamp_cycles': 223, 'sent': 6312, 'policy': 'real_clamp12', 'track_err_max_deg': 21.9}
+   218.135 [GUI] 정책 보행: 멈춤: 모두 힘 풀기 (Esc / 빨간 버튼)
+   218.250 [CAN] ⚠ Radxa: 버스 2 송신 실패: [Errno 5] Input/output error
+   218.389 [CAN] ⚠ Radxa: 버스 1 송신 실패: [Errno 5] Input/output error
+   218.532 [CAN] ⚠ Radxa: 버스 1 송신 실패: [Errno 5] Input/output error
+   218.651 [CAN] ⚠ Radxa: 버스 2 송신 실패: [Errno 5] Input/output error
+   219.053 [GUI] 정책 보행: Radxa 기록 → logs/policy_walk_20261125_110553_real_clamp12_12Nm/real_walk.npz (4787 KB) + real_walk_io.npz

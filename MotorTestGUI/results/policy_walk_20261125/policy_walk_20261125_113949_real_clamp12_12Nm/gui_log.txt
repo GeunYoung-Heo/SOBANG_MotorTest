@@ -1,0 +1,25 @@
+    26.416 [GUI] 정책 보행: 시작 요청 (정책 real_clamp12, 앞으로 0.20 m/s, 토크 한계 12 N·m 켬 (Radxa 목표 자르기, 정책 학습 값), 정지: 기울기 30°·추종 오차 30° 0.5 s·Vbus 21.5 V): L hip roll 부호 -1 영점 0.5236, L hip yaw 부호 -1 영점 0.2441, L hip pitch 부호 -1 영점 0.8354, L knee pitch 부호 -1 영점 0.6002, L ankle pitch 부호 -1 영점 0.9838, L ankle roll 부호 -1 영점 0.2539, R hip roll 부호 -1 영점 0.0262, R hip yaw 부호 -1 영점 0.3778, R hip pitch 부호 -1 영점 0.8512, R knee pitch 부호 -1 영점 -0.0147, R ankle pitch 부호 -1 영점 0.8108, R ankle roll 부호 -1 영점 0.9325
+    27.051 [GUI] 정책 보행: Radxa에서 시작: 서기 자세로 4 s 이동 (정책 real_clamp12, 토크 한계 12 N·m, 기울기 정지 30.0°, 추종 오차 정지 30.0° 0.5 s)
+    27.052 [CAN] [Radxa] [bridge] 정책 보행: {'type': 'started', 'log': '/home/radxa/motor_bridge/logs/real_walk_20261125_113949_real_clamp12_12Nm.npz', 'policy': 'real_clamp12', 'torque_clamp': True, 'limit_nm': 12.0, 'trained_clamp': True, 'tilt_limit_deg': 30.0, 'track_limit_deg': 30.0, 'track_time_s': 0.5}
+    31.352 [GUI] 정책 보행: 서기 자세 도달, 유지 중 (발이 바닥에 닿으면 '정책 켜기')
+    78.381 [GUI] 정책 보행: 정책 켜기 (발이 바닥에 닿음, IMU 앞 숙임 +0.6° 오른쪽 -0.1°)
+    78.391 [GUI] 정책 보행: 정책 보행 시작
+    81.850 [GUI] 정책 보행: 제자리에 서기 요청 (정책 끄고 서기 자세로 1 s, 드라이버 PD로 유지)
+    81.958 [GUI] 정책 보행: 정책 끔, 서기 자세로 돌아가는 중 (1 s)
+    82.872 [GUI] 정책 보행: 서기 자세 도달, 유지 중 (발이 바닥에 닿으면 '정책 켜기')
+   104.428 [GUI] 정책 보행: 정책 켜기 (발이 바닥에 닿음, IMU 앞 숙임 +0.5° 오른쪽 +0.2°)
+   104.466 [GUI] 정책 보행: 정책 보행 시작
+   108.943 [GUI] 정책 보행: 제자리에 서기 요청 (정책 끄고 서기 자세로 1 s, 드라이버 PD로 유지)
+   109.042 [GUI] 정책 보행: 정책 끔, 서기 자세로 돌아가는 중 (1 s)
+   109.963 [GUI] 정책 보행: 서기 자세 도달, 유지 중 (발이 바닥에 닿으면 '정책 켜기')
+   129.015 [GUI] 정책 보행: 정책 켜기 (발이 바닥에 닿음, IMU 앞 숙임 -6.0° 오른쪽 +2.2°)
+   129.106 [GUI] 정책 보행: 정책 보행 시작
+   132.636 [GUI] 정책 보행: 멈춤 요청: 정책 보행 '멈춤' 버튼
+   132.637 [GUI] 모두 힘 풀기 (정책 보행 '멈춤' 버튼)
+   132.640 [CAN] 모든 노드 IDLE 명령 (12개, 버스 2개)
+   132.644 [CAN] [Radxa] [bridge] 모두 힘 풀기 (정책 멈춤: 정책 보행 '멈춤' 버튼): IDLE 프레임 26개
+   132.885 [CAN] [Radxa] stopped: stop requested; log -> /home/radxa/motor_bridge/logs/real_walk_20261125_113949_real_clamp12_12Nm.npz
+   133.065 [CAN] [Radxa] [bridge] 정책 보행: {'type': 'stopped', 'reason': "정책 보행 '멈춤' 버튼", 'log': '/home/radxa/motor_bridge/logs/real_walk_20261125_113949_real_clamp12_12Nm.npz', 'log_size': 4090414, 'io_log': '/home/radxa/motor_bridge/logs/real_walk_20261125_113949_real_clamp12_12Nm_io.npz', 'clamp_cycles': 391, 'sent': 5265, 'policy': 'real_clamp12', 'track_err_max_deg': 25.9}
+   133.069 [GUI] 정책 보행: 목표를 자른 주기 391 / 5265, 추종 오차 최대 25.9°, 버스 전압 최저 23.04 V (node 2)
+   133.074 [GUI] 정책 보행: 멈춤: 정책 보행 '멈춤' 버튼
+   134.056 [GUI] 정책 보행: Radxa 기록 → logs/policy_walk_20261125_113949_real_clamp12_12Nm/real_walk.npz (3994 KB) + real_walk_io.npz

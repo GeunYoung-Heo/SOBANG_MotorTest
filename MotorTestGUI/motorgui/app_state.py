@@ -116,6 +116,7 @@ class App:
     # ------------------------------------------------------------------ 매 프레임
     def update(self):
         self.walk.update()
+        self.policy.tick()                      # 정책 보행 중 버스 전압 감시 (21.5 V 아래면 모두 힘 풀기)
         t = self.now()
         # 실물 자세 (연결 안 된 관절은 0)
         ptg = self.policy.target_q()            # 정책 보행 중이면 Radxa가 보낸 목표 (10 Hz)

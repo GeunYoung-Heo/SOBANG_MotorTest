@@ -1,0 +1,23 @@
+{
+ "folder": "policy_walk_20261125_111736_real_clamp9_9Nm",
+ "cycles": 88,
+ "dur_ramp": 1.7600403919714154,
+ "dur_hold": 0.0,
+ "dur_policy": 0.0,
+ "reason_npz": "stop requested",
+ "reason_gui": "멈춤: 정책 보행 '멈춤' 버튼",
+ "period_p99": 20.653908859831063,
+ "period_max": 20.89470800001436,
+ "n_period_over30": 0,
+ "loop_p99": 12.963460040136844,
+ "stale_encoder": 2,
+ "imu_same": 0,
+ "vbus_min": 23.665576934814453,
+ "vbus_max": 24.048267364501953,
+ "findings": [
+  "ℹ 정책을 켜지 않은 기록입니다 (이동·유지만).",
+  "ℹ 운영자·GUI 쪽에서 멈춤: 멈춤: 정책 보행 '멈춤' 버튼",
+  "ℹ 엔코더 정체 응답 2번 (정책 중 0.00 %). 5주기 연속이면 Radxa가 멈춤.",
+  "✓ 주기 최대 20.9 ms (30 ms 넘은 적 없음)."
+ ]
+}

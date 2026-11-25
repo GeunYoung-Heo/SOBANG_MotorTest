@@ -5,7 +5,8 @@ arbitration ID(node << 5 | cmd)로 나눠 받는다 (하나씩 기다리지 않�
 
 주기마다:
   - 움직이는 궤적이 있는 관절: Set Input Pos (궤적 끝 + 0.1 s까지)
-  - 연결된 노드: Get Encoder Estimates (poll_hz), Get Iq (선택 관절은 매번, 나머지는 1/5), Vbus (2 s마다)
+  - 연결된 노드: Get Encoder Estimates (poll_hz), Get Iq (선택 관절은 매번, 나머지는 1/5), Vbus (2 s마다,
+    정책 보행 중에는 0.5 s마다)
   - 연결 안 된 노드: 0.5 s마다 한 번 Get Encoder Estimates로 찔러 봄 (heartbeat가 꺼진 보드 대비)
   - axis error가 있으면 motor/encoder error 요청
 
@@ -485,7 +486,8 @@ class CanLink:
                     ok &= self._rtr(n, cs.GET_ENCODER_ESTIMATES)
                 if n == sel or (tick + n) % 5 == 0:
                     self._rtr(n, cs.GET_IQ)
-                if (tick + 7 * n) % 100 == 0:
+                # Vbus: 평소 2 s마다, 정책 보행 중에는 0.5 s마다 (GUI가 21.5 V 아래면 정책을 멈춤)
+                if (tick + 7 * n) % (25 if self.passive_encoder else 100) == 0:
                     self._rtr(n, cs.GET_VBUS)
                 if ns.axis_error and (tick + n) % 25 == 0:
                     self._rtr(n, cs.GET_MOTOR_ERROR)

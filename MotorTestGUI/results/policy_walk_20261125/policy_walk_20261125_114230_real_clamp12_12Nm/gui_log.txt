@@ -1,0 +1,23 @@
+   186.938 [GUI] 정책 보행: 시작 요청 (정책 real_clamp12, 앞으로 0.20 m/s, 토크 한계 12 N·m 켬 (Radxa 목표 자르기, 정책 학습 값), 정지: 기울기 30°·추종 오차 30° 0.5 s·Vbus 21.5 V): L hip roll 부호 -1 영점 0.5236, L hip yaw 부호 -1 영점 0.2441, L hip pitch 부호 -1 영점 0.8354, L knee pitch 부호 -1 영점 0.6002, L ankle pitch 부호 -1 영점 0.9838, L ankle roll 부호 -1 영점 0.2539, R hip roll 부호 -1 영점 0.0262, R hip yaw 부호 -1 영점 0.3778, R hip pitch 부호 -1 영점 0.8512, R knee pitch 부호 -1 영점 -0.0147, R ankle pitch 부호 -1 영점 0.8108, R ankle roll 부호 -1 영점 0.9325
+   187.014 [GUI] 정책 보행: Radxa에서 시작: 서기 자세로 4 s 이동 (정책 real_clamp12, 토크 한계 12 N·m, 기울기 정지 30.0°, 추종 오차 정지 30.0° 0.5 s)
+   187.015 [CAN] [Radxa] [bridge] 정책 보행: {'type': 'started', 'log': '/home/radxa/motor_bridge/logs/real_walk_20261125_114230_real_clamp12_12Nm.npz', 'policy': 'real_clamp12', 'torque_clamp': True, 'limit_nm': 12.0, 'trained_clamp': True, 'tilt_limit_deg': 30.0, 'track_limit_deg': 30.0, 'track_time_s': 0.5}
+   191.214 [GUI] 정책 보행: 서기 자세 도달, 유지 중 (발이 바닥에 닿으면 '정책 켜기')
+   225.096 [GUI] 정책 보행: 정책 켜기 (발이 바닥에 닿음, IMU 앞 숙임 +0.5° 오른쪽 +0.1°)
+   225.132 [GUI] 정책 보행: 정책 보행 시작
+   229.072 [GUI] 정책 보행: 제자리에 서기 요청 (정책 끄고 서기 자세로 1 s, 드라이버 PD로 유지)
+   229.106 [GUI] 정책 보행: 정책 끔, 서기 자세로 돌아가는 중 (1 s)
+   230.122 [GUI] 정책 보행: 서기 자세 도달, 유지 중 (발이 바닥에 닿으면 '정책 켜기')
+   234.387 [GUI] 정책 보행: 정책 켜기 (발이 바닥에 닿음, IMU 앞 숙임 +19.1° 오른쪽 -2.8°)
+   234.402 [GUI] 정책 보행: 정책 보행 시작
+   237.342 [GUI] 정책 보행: 제자리에 서기 요청 (정책 끄고 서기 자세로 1 s, 드라이버 PD로 유지)
+   237.362 [GUI] 정책 보행: 정책 끔, 서기 자세로 돌아가는 중 (1 s)
+   238.382 [GUI] 정책 보행: 서기 자세 도달, 유지 중 (발이 바닥에 닿으면 '정책 켜기')
+   242.370 [GUI] 정책 보행: 멈춤 요청: 정책 보행 '멈춤' 버튼
+   242.371 [GUI] 모두 힘 풀기 (정책 보행 '멈춤' 버튼)
+   242.373 [CAN] 모든 노드 IDLE 명령 (12개, 버스 2개)
+   242.392 [CAN] [Radxa] [bridge] 모두 힘 풀기 (정책 멈춤: 정책 보행 '멈춤' 버튼): IDLE 프레임 48개
+   242.516 [CAN] [Radxa] stopped: stop requested; log -> /home/radxa/motor_bridge/logs/real_walk_20261125_114230_real_clamp12_12Nm.npz
+   242.626 [GUI] 정책 보행: 목표를 자른 주기 244 / 2762, 추종 오차 최대 24.0°, 버스 전압 최저 23.05 V (node 12)
+   242.631 [CAN] [Radxa] [bridge] 정책 보행: {'type': 'stopped', 'reason': "정책 보행 '멈춤' 버튼", 'log': '/home/radxa/motor_bridge/logs/real_walk_20261125_114230_real_clamp12_12Nm.npz', 'log_size': 2148862, 'io_log': '/home/radxa/motor_bridge/logs/real_walk_20261125_114230_real_clamp12_12Nm_io.npz', 'clamp_cycles': 244, 'sent': 2762, 'policy': 'real_clamp12', 'track_err_max_deg': 24.0}
+   242.639 [GUI] 정책 보행: 멈춤: 정책 보행 '멈춤' 버튼
+   243.499 [GUI] 정책 보행: Radxa 기록 → logs/policy_walk_20261125_114230_real_clamp12_12Nm/real_walk.npz (2098 KB) + real_walk_io.npz

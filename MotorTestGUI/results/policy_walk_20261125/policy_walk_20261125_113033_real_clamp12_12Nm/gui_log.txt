@@ -1,0 +1,19 @@
+  1097.292 [GUI] 정책 보행: 시작 요청 (정책 real_clamp12, 앞으로 0.20 m/s, 토크 한계 12 N·m 켬 (Radxa 목표 자르기, 정책 학습 값), 정지: 기울기 30°·추종 오차 30° 0.5 s·Vbus 21.5 V): L hip roll 부호 -1 영점 0.5236, L hip yaw 부호 -1 영점 0.2441, L hip pitch 부호 -1 영점 0.8354, L knee pitch 부호 -1 영점 0.6002, L ankle pitch 부호 -1 영점 0.9838, L ankle roll 부호 -1 영점 0.2539, R hip roll 부호 -1 영점 0.0262, R hip yaw 부호 -1 영점 0.3778, R hip pitch 부호 -1 영점 0.8512, R knee pitch 부호 -1 영점 -0.0147, R ankle pitch 부호 -1 영점 0.8108, R ankle roll 부호 -1 영점 0.9325
+  1097.708 [GUI] 정책 보행: Radxa에서 시작: 서기 자세로 4 s 이동 (정책 real_clamp12, 토크 한계 12 N·m, 기울기 정지 30.0°, 추종 오차 정지 30.0° 0.5 s)
+  1097.708 [CAN] [Radxa] [bridge] 정책 보행: {'type': 'started', 'log': '/home/radxa/motor_bridge/logs/real_walk_20261125_113033_real_clamp12_12Nm.npz', 'policy': 'real_clamp12', 'torque_clamp': True, 'limit_nm': 12.0, 'trained_clamp': True, 'tilt_limit_deg': 30.0, 'track_limit_deg': 30.0, 'track_time_s': 0.5}
+  1099.328 [GUI] 정책 보행: 앞으로 걷는 속도 0.30 m/s
+  1101.884 [GUI] 정책 보행: 서기 자세 도달, 유지 중 (발이 바닥에 닿으면 '정책 켜기')
+  1129.264 [GUI] 정책 보행: 정책 켜기 (발이 바닥에 닿음, IMU 앞 숙임 -1.0° 오른쪽 +0.0°)
+  1129.365 [GUI] 정책 보행: 정책 보행 시작
+  1133.206 [GUI] 정책 보행: 멈춤 요청: 정책 보행 '멈춤' 버튼
+  1133.207 [GUI] 모두 힘 풀기 (정책 보행 '멈춤' 버튼)
+  1133.208 [CAN] 모든 노드 IDLE 명령 (12개, 버스 2개)
+  1133.232 [CAN] [Radxa] [bridge] 모두 힘 풀기 (정책 멈춤: 정책 보행 '멈춤' 버튼): IDLE 프레임 48개
+  1133.322 [CAN] [Radxa] stopped: stop requested; log -> /home/radxa/motor_bridge/logs/real_walk_20261125_113033_real_clamp12_12Nm.npz
+  1133.394 [GUI] 정책 보행: 목표를 자른 주기 159 / 1770, 추종 오차 최대 28.2°, 버스 전압 최저 23.16 V (node 3)
+  1133.394 [CAN] [Radxa] [bridge] 정책 보행: {'type': 'stopped', 'reason': "정책 보행 '멈춤' 버튼", 'log': '/home/radxa/motor_bridge/logs/real_walk_20261125_113033_real_clamp12_12Nm.npz', 'log_size': 1379070, 'io_log': '/home/radxa/motor_bridge/logs/real_walk_20261125_113033_real_clamp12_12Nm_io.npz', 'clamp_cycles': 159, 'sent': 1770, 'policy': 'real_clamp12', 'track_err_max_deg': 28.2}
+  1133.395 [GUI] 정책 보행: 멈춤: 정책 보행 '멈춤' 버튼
+  1134.243 [GUI] 정책 보행: Radxa 기록 → logs/policy_walk_20261125_113033_real_clamp12_12Nm/real_walk.npz (1346 KB) + real_walk_io.npz
+  1135.201 [CAN] [Radxa] client_loop: send disconnect: Connection reset
+  1135.211 [CAN] ⚠ Radxa 중계 프로그램이 끝났습니다 (SSH 끊김)
+  1135.215 [CAN] CAN 통신 오류: Radxa 중계 프로그램이 끝났습니다 (SSH 끊김)

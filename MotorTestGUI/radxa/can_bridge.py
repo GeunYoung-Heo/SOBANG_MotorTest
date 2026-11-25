@@ -25,8 +25,10 @@ CAN 장치:
   5 LOG      →GUI    UTF-8 글
   6 IMU      →GUI    JSON 한 줄 (imu_reader.py 출력, 표본은 약 50 Hz로 솎음. 끝나면 {"type": "exit", ...})
   7 IMU_CMD  GUI→    JSON {"cmd": "start", "opts": {sensor, bus, port, baud, axes, out_hz}} 또는 {"cmd": "stop"}
-  8 POLICY_CMD GUI→  JSON {"cmd": "start", joints, torque_clamp, command, log_name} / "floor" / "command" (v) / "stop"
-  9 POLICY   →GUI    JSON (started, status 10 Hz, stopped, error)
+  8 POLICY_CMD GUI→  JSON {"cmd": "start", policy, joints, torque_clamp, limit_nm, tilt_limit_deg, command, log_name}
+                     / "floor" / "command" (v) / "stand" (정책 끄고 서기 자세 유지) / "stop"
+  9 POLICY   →GUI    JSON (started: Radxa가 정한 정책·한계, status 10 Hz, stopped, error)
+  INFO의 policy: {files, missing, policies: [{name, torque_clamp_nm}]} (Radxa ~/motor_bridge/policies/에 있는 정책)
 
 IMU: GUI가 IMU_CMD start를 보내면 같은 폴더의 imu_reader.py를 별도 프로세스로 띄운다 (BMI088이면 numpy·smbus2가
 그 프로세스에만 필요). IMU가 멈추거나 오류가 나도 CAN 중계와 감시(IDLE)에는 영향이 없다. GUI 연결이 끊기면 IMU도 끈다.
@@ -50,7 +52,7 @@ import threading
 import time
 from collections import deque
 
-VERSION = "2026-11-23"
+VERSION = "2026-11-25"
 CANABLE_IDS = {("16d0", "117e")}
 SLCAN_BITRATE = {10000: b"0", 20000: b"1", 50000: b"2", 100000: b"3", 125000: b"4", 250000: b"5",
                  500000: b"6", 750000: b"7", 1000000: b"8"}
@@ -415,7 +417,11 @@ class Bridge:
                 if miss:
                     raise RuntimeError(f"Radxa에 없는 패키지: {', '.join(miss)} (README 12절 설치)")
                 if not walk_policy.policy_files_ok():
-                    raise RuntimeError("Radxa에 정책 파일이 없습니다 (policies/real_walk)")
+                    raise RuntimeError("Radxa에 정책 파일이 없습니다 (~/motor_bridge/policies/, 끊고 다시 연결)")
+                try:
+                    walk_policy.policy_dir(str(d.get("policy") or walk_policy.DEFAULT_POLICY))
+                except ValueError as e:
+                    raise RuntimeError(str(e)) from None
                 if self.policy_active():
                     raise RuntimeError("이미 정책 보행 중입니다")
                 if self.policy_imu is None:
@@ -425,16 +431,21 @@ class Bridge:
                     if self.client is None or self.tripped:
                         raise RuntimeError("GUI 연결이 끊겼거나 감시가 걸린 상태입니다")
                     self.policy = run
-                self.policy_report({"type": "started", "log": run.log_path,
-                                    "torque_clamp": bool(d.get("torque_clamp", True))})
+                self.policy_report({"type": "started", "log": run.log_path, **run.describe()})
                 run.start()
             elif p is None or not p.active:
                 if cmd == "stop":
                     return
                 raise RuntimeError("정책 보행 중이 아닙니다")
             elif cmd == "floor":
+                p.stand_ev.clear()
                 p.floor_ev.set()
                 self.policy_report({"type": "floor"})
+            elif cmd == "stand":                 # 제자리에 서기: 정책 끄고 서기 자세로 돌아가 PD로 유지
+                if p.phase != "walk":
+                    raise RuntimeError("정책 보행 중에만 '제자리에 서기'를 합니다")
+                p.stand_ev.set()
+                self.policy_report({"type": "stand"})
             elif cmd == "command":
                 v = [float(x) for x in d.get("v", [0.0, 0.0, 0.0])][:3]
                 if len(v) == 3 and all(math.isfinite(x) for x in v):
@@ -542,7 +553,8 @@ class Bridge:
                 "buses": [{"name": d.name, "kind": d.kind, "serial": d.serial} for d in self.devices],
                 "imu": os.path.exists(IMU_READER),
                 "policy": None if walk_policy is None else {"files": walk_policy.policy_files_ok(),
-                                                            "missing": walk_policy.missing_deps()}}
+                                                            "missing": walk_policy.missing_deps(),
+                                                            "policies": walk_policy.list_policies()}}
         cl.send_msg(T_INFO, json.dumps(info).encode())
         log(f"GUI 연결됨 (버스 {len(self.devices)}개)")
         try:

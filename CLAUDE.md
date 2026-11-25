@@ -103,3 +103,7 @@ scp radxa:/etc/os-release .
 - 사용자 허락을 받고 onnxruntime 1.22.1(+ coloredlogs, flatbuffers, humanfriendly, mpmath, packaging, protobuf, sympy)을 radxa 계정 `~/.local`에 설치했다. 인터넷이 없어 노트북에서 `pip download --platform manylinux_2_27_aarch64 --python-version 311 --only-binary=:all:`로 받은 wheel을 scp로 보내 `pip install --user --break-system-packages --no-index --find-links`로 넣었다. PyYAML 6.0은 원래 있었다.
 - 정책 점검: `ssh radxa "cd ~/motor_bridge && python3 walk_policy.py"` → ok, 기준 차이 4.3e-6, 한 스텝 0.81 ms.
 - 정책은 Radxa의 CAN 중계 안에서 돈다 (`MotorTestGUI/README.md` 12절). GUI 정책 보행 탭에서 시작·정지.
+- 2026-11-25: RL 세션이 `real_clamp12` / `real_clamp9` / `real_clamp6`을 학습했다 (RL 레포 5be5fd2). Radxa 목표 자르기를 학습에 넣었고, 한계는 각 `policy.yaml`의 `torque_clamp_nm` 값이다.
+  - 파일은 `MotorTestGUI/radxa/policies/`에 두었다. GUI 탭 맨 위 드롭다운에서 고르고, 연결할 때 Radxa에 복사된다.
+  - 안전 기준도 RL 절차서대로 바꿨다: 기울기 정지 30°, 추종 오차 30°·0.5 s(자른 목표 기준), Vbus 21.5 V 미만이면 GUI가 멈춤, 정책 켜기 직전 IMU 앞 숙임 2°.
+  - 노트북에서 정책 4개를 점검했고 PC 통합 시험 32/32를 통과했다. Radxa에서의 `python3 walk_policy.py` 점검은 아직 하지 않았다.

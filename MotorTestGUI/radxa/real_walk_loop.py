@@ -11,6 +11,12 @@ io must provide (positions in motor turns, policy joint order of policy.yaml):
     errors() -> list[str]                                   driver errors seen since the last call, [] if none
 imu: Bmi088Imu (robot/bmi088.py) after is_calibrated, or anything with quaternion (w, x, y, z) and
 angular_velocity (deg/s) in the base frame.
+
+MotorTestGUI copy (RL repo 5be5fd2) + one addition, 2026-11-25: stand_requested(). When it returns True while the
+policy runs, the policy stops, the targets move in STAND_STEPS from the measured pose to the standing pose and the
+drivers' PD holds it ("hold" again; floor_ready() starts the policy again with policy.reset()). The tilt stop stays
+on in that return ramp and the hold after it (the robot is on the floor). The log marks the return ramp as state 0.
+With the default stand_requested this file behaves exactly like the RL repo's.
 """
 
 import time
@@ -32,12 +38,14 @@ except ImportError:  # repository layout: load policy/real_walk.py by path (the 
 
 PERIOD = 0.02  # s, policy_dt
 RAMP_STEPS = 200  # 4 s from the current pose to the standing pose (robot hanging)
-TILT_LIMIT_DEG = 20.0
+TILT_LIMIT_DEG = 30.0  # 11-25: was 20; training ends episodes at 45 deg, the real robot recovered from 16.7 deg
 MAX_LATE_CYCLES = 5  # consecutive cycles more than 10 ms late -> stop
+STAND_STEPS = 50  # MotorTestGUI: 1 s from the walking pose back to the standing pose (stand_requested)
 
 
 def run_walk_test(io, imu, joint_map, get_command, floor_ready, log_path="real_walk_log.npz",
-                  policy_dir="policies/real_walk", stop_requested=lambda: False):
+                  policy_dir="policies/real_walk", stop_requested=lambda: False, tilt_limit_deg=TILT_LIMIT_DEG,
+                  stand_requested=lambda: False):
     """Run the test until stop_requested(), a safety stop or Ctrl-C; then all axes go IDLE and the log is saved.
 
     get_command() -> (vx m/s, vy m/s, wz rad/s), called every policy step (0 at first; clipped to the training ranges).
@@ -52,6 +60,7 @@ def run_walk_test(io, imu, joint_map, get_command, floor_ready, log_path="real_w
     io.enable()
     plan = list(stand_targets(joint_map.joint_positions(turns), policy.standing_pose, RAMP_STEPS))
     state, late = "ramp", 0
+    on_floor = False  # MotorTestGUI: set once the policy has run (the stand ramp and hold after it keep the tilt stop)
     t_start = next_time = time.perf_counter()
     try:
         while not stop_requested():
@@ -62,9 +71,15 @@ def run_walk_test(io, imu, joint_map, get_command, floor_ready, log_path="real_w
             gyro = np.deg2rad(np.array(imu.angular_velocity, dtype=np.float32))
             gravity = projected_gravity(quat)
             command = np.zeros(3, dtype=np.float32)
+            if state == "walk" and stand_requested():  # MotorTestGUI: policy off, back to the standing pose on PD
+                plan = list(stand_targets(q, policy.standing_pose, STAND_STEPS))
+                state = "stand"
             phase = state  # the state that makes this cycle's target
 
-            if state == "ramp":
+            if on_floor and state in ("stand", "hold") and tilt_deg(gravity) > tilt_limit_deg:
+                reason = f"tilt {tilt_deg(gravity):.1f} deg"
+                break
+            if state in ("ramp", "stand"):
                 target = plan.pop(0)
                 if not plan:
                     state = "hold"
@@ -74,7 +89,8 @@ def run_walk_test(io, imu, joint_map, get_command, floor_ready, log_path="real_w
                     policy.reset()
                     state = "walk"
             if state == "walk":
-                if tilt_deg(gravity) > TILT_LIMIT_DEG:
+                on_floor = True
+                if tilt_deg(gravity) > tilt_limit_deg:
                     reason = f"tilt {tilt_deg(gravity):.1f} deg"
                     break
                 command = np.asarray(get_command(), dtype=np.float32)
@@ -87,7 +103,7 @@ def run_walk_test(io, imu, joint_map, get_command, floor_ready, log_path="real_w
                 break
 
             log["time"].append(cycle_start - t_start)
-            log["state"].append(("ramp", "hold", "walk").index(phase))
+            log["state"].append(("ramp", "hold", "walk").index("ramp" if phase == "stand" else phase))
             log["command"].append(command)
             log["observation"].append(policy.observation_buffer[0].copy() if state == "walk" else np.zeros(45))
             log["action"].append(policy.last_action.copy() if state == "walk" else np.zeros(12))

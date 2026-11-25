@@ -31,8 +31,16 @@ import can
 RADXA_DIR = Path(__file__).resolve().parents[1] / "radxa"
 BRIDGE_SRC = RADXA_DIR / "can_bridge.py"
 DEPLOY_FILES = ("can_bridge.py", "imu_reader.py", "bmi088.py",
-                "walk_policy.py", "real_walk.py", "real_walk_loop.py",          # 정책 보행 (RL 세션 코드 사본)
-                "policies/real_walk/policy.onnx", "policies/real_walk/policy.yaml")
+                "walk_policy.py", "real_walk.py", "real_walk_loop.py")          # 정책 보행 (RL 세션 코드 사본)
+
+
+def deploy_files():
+    """복사할 파일: 위 목록 + radxa/policies/<이름>/의 policy.onnx·policy.yaml 전부 (GUI 정책 목록과 같게)."""
+    names = list(DEPLOY_FILES)
+    for d in sorted((RADXA_DIR / "policies").glob("*")):
+        if (d / "policy.onnx").is_file() and (d / "policy.yaml").is_file():
+            names += [f"policies/{d.name}/policy.onnx", f"policies/{d.name}/policy.yaml"]
+    return names
 REMOTE_DIR = "~/motor_bridge"
 HDR = struct.Struct("<BH")
 FRAME = struct.Struct("<BBBxI8s")
@@ -60,7 +68,7 @@ def deploy_bundle():
     """Radxa에 보낼 파일들을 tar 하나로."""
     buf = io.BytesIO()
     with tarfile.open(fileobj=buf, mode="w", format=tarfile.USTAR_FORMAT) as tf:
-        for name in DEPLOY_FILES:
+        for name in deploy_files():
             data = (RADXA_DIR / name).read_bytes()
             ti = tarfile.TarInfo(name)
             ti.size, ti.mode, ti.mtime = len(data), 0o644, int(time.time())

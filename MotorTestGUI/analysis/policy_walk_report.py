@@ -36,7 +36,8 @@ sys.path.insert(0, str(HERE))
 from onnx_numpy import OnnxMlp  # noqa: E402
 
 LOG_ROOT = GUI_ROOT / "logs"
-POLICY_DIR = GUI_ROOT / "radxa" / "policies" / "real_walk"
+POLICIES_DIR = GUI_ROOT / "radxa" / "policies"
+POLICY_DIR = POLICIES_DIR / "real_walk"          # meta.json에 policy_name이 없는 기록 (2026-11-24)
 MJCF = GUI_ROOT / "assets" / "asmr2026-humanoid-v1" / "mjcf" / "asmr2026_humanoid.xml"
 CONFIG = GUI_ROOT / "config" / "robot_config.json"
 
@@ -49,12 +50,16 @@ COMMAND_LIMITS = np.array([0.5, 0.25, 1.0])
 # RL 절차서 기준과 시뮬 보행 값
 S2_TRACK_DEG = 1.0
 S3_TILT_DEG = 5.0
-STOP_TILT_DEG = 20.0
+STOP_TILT_DEG = 20.0            # 2026-11-24 기록. 11-25부터는 meta.json stop_limits.tilt_deg (30°)
 SAT_RUN_S = 1.0
 PERIOD_BAD_MS = 30.0
-SIM_ERR_P99_DEG = 23.0
+SIM_ERR_P99_DEG = 23.0          # real_walk 시뮬 보행 (목표 − 실제)
 SIM_ERR_MAX_DEG = 50.0
 SIM_ERR12_RUN_S = 0.26
+# real_clamp* (RL DEPLOY.md 14절, MuJoCo, 자르기 후 목표 − 엔코더): 상위 1 % 13–19°, 최대 19–27°, 12° 초과 최장 0.28 s
+SIM_CLAMP_ERR_P99_DEG = 19.0
+SIM_CLAMP_ERR_MAX_DEG = 27.0
+SIM_CLAMP_ERR12_RUN_S = 0.28
 SIM_QD_MAX = 11.0
 OVERSPEED_QD = 25.0
 TRAIN_ZERO_DEG = 2.0
@@ -86,6 +91,9 @@ def decode(code, table):
 
 # ---------------------------------------------------------------------------------------------- 읽기
 def _num(s):
+    s = s.split(" #", 1)[0].strip()
+    if s.startswith("[") and s.endswith("]"):          # 한 줄 목록: [0.1, 0.2]
+        return [_num(x) for x in s[1:-1].split(",") if x.strip()]
     try:
         return float(s)
     except ValueError:
@@ -251,8 +259,12 @@ class Run:
 
 # ---------------------------------------------------------------------------------------------- 분석
 class Analysis:
-    def __init__(self, run, policy_dir=POLICY_DIR):
+    def __init__(self, run, policy_dir=None):
         self.run = run
+        if policy_dir is None:              # 기록의 meta.json이 고른 정책 (11-25부터), 없으면 real_walk
+            name = run.meta.get("policy_name") if run.meta else None
+            policy_dir = POLICIES_DIR / name if name and (POLICIES_DIR / name / "policy.yaml").exists() else POLICY_DIR
+        self.policy_name = Path(policy_dir).name
         self.findings = []          # (등급, 문장)  등급: "⚠" 문제·기준 넘음, "ℹ" 참고, "✓" 기준 통과
         self.sections = []          # (제목, 마크다운)
         self.summary = {"folder": run.name}
@@ -281,8 +293,19 @@ class Analysis:
         self.motor = [self.cfg.get(n, {}).get("motor", "5010" if "ankle" in n else "6512") for n in self.names]
         tl = run.meta.get("torque_limit_6Nm", True)
         self.torque_limit_on = bool(tl)            # GUI 옵션 (ODrive 0.5.1에서는 실제 전류 한계를 바꾸지 못함, 아래)
-        # 학습 토크 한계 (policy.yaml effort_limits, 6 N·m)와 그에 해당하는 전류
-        self.train_limit = np.array(y.get("effort_limits", [6.0] * 12), dtype=float)
+        # 학습 토크 한계와 그에 해당하는 전류: real_walk는 policy.yaml effort_limits (6 N·m),
+        # real_clamp*는 학습에 넣은 Radxa 목표 자르기 한계 torque_clamp_nm (effort_limits는 드라이버 한계 18/22.6)
+        self.clamp_nm = y.get("torque_clamp_nm") if isinstance(y.get("torque_clamp_nm"), (int, float)) else None
+        if self.clamp_nm:
+            self.train_limit = np.full(12, float(self.clamp_nm))
+            self.sim_err = (SIM_CLAMP_ERR_P99_DEG, SIM_CLAMP_ERR_MAX_DEG, SIM_CLAMP_ERR12_RUN_S)
+        else:
+            self.train_limit = np.array(y.get("effort_limits", [6.0] * 12), dtype=float)
+            self.sim_err = (SIM_ERR_P99_DEG, SIM_ERR_MAX_DEG, SIM_ERR12_RUN_S)
+        self.lim_txt = f"{float(np.max(self.train_limit)):g} N·m"
+        stop = run.meta.get("stop_limits") if isinstance(run.meta.get("stop_limits"), dict) else {}
+        self.stop_tilt = float(stop.get("tilt_deg", STOP_TILT_DEG))
+        self.stop_track = (float(stop.get("track_deg", 30.0)), float(stop.get("track_s", 0.5))) if stop else None
         self.cur_limit = self.train_limit / 15.0 / np.array([KT[m] for m in self.motor])
         # 드라이버의 실제 한계: ODrive 0.5.1 CAN Simple의 0x00F는 vel_limit만 바꾼다 (current_lim 쓰기 없음,
         # 2026-11-24 실물 Iq 명령이 18.00 A까지 나와 확인) → 드라이버 설정 current_lim(기본 18 A)이 그대로 걸림
@@ -329,6 +352,18 @@ class Analysis:
         self.sat = np.abs(self.tau) >= self.train_limit     # 학습 한계 6 N·m 이상 (학습 때는 여기서 잘림)
         idx = np.flatnonzero(self.pol)
         self.k0 = int(idx[0]) if idx.size else None             # 정책 첫 주기
+        # 정책 구간 [(시작, 끝)]: '제자리에 서기'(11-25) 뒤 다시 '정책 켜기'를 하면 한 기록에 여러 개
+        self.pol_segs = []
+        k = 0
+        while k < self.N:
+            if self.pol[k]:
+                e = k
+                while e + 1 < self.N and self.pol[e + 1]:
+                    e += 1
+                self.pol_segs.append((k, e + 1))
+                k = e + 1
+            else:
+                k += 1
 
     def _align_io(self):
         """real_walk_io.npz의 target_sent·clamped를 npz 주기에 맞춘다. send_targets 호출은 루프 전 1번이 더 있고,
@@ -394,6 +429,9 @@ class Analysis:
             clamp = m.get("torque_clamp")
             lines.append(f"- 시작: {m.get('start_ms') or m.get('start')}, 시작 명령: {m.get('command_at_start', '–')}, "
                          f"IMU 축: {m.get('imu_axes')}")
+            lines.append(f"- 정책: {self.policy_name}"
+                         + (f" (학습에 넣은 자르기 {self.clamp_nm:g} N·m)" if self.clamp_nm else " (학습 토크 한계 effort_limits)")
+                         + (f", 정지 기준: {m['stop_limits']}" if m.get("stop_limits") else ", 정지 기준: 기울기 20° (11-24)"))
             lines.append(f"- 토크: 드라이버 전류 한계 {self.drive_current:g} A (CAN으로 못 바꿈). Radxa 목표 자르기: "
                          + (f"{clamp.get('method')} {clamp.get('limit_nm')} N·m" if isinstance(clamp, dict) else "없음")
                          + (f" ({self.io_note})" if self.has_npz and self.io_note else ""))
@@ -444,7 +482,11 @@ class Analysis:
         r = (self.reason if self.has_npz else "") or ""
         g = self.run.stop_reason_gui or ""
         if r.startswith("tilt"):
-            self.add("⚠", f"몸통 기울기 20° 초과로 Radxa가 멈춤 ({r}). '멈추기 직전' 절에서 어느 쪽으로 넘어갔는지 확인.")
+            self.add("⚠", f"몸통 기울기 {self.stop_tilt:g}° 초과로 Radxa가 멈춤 ({r}). '멈추기 직전' 절에서 어느 쪽으로 넘어갔는지 확인.")
+        elif "추종 오차" in r:
+            self.add("⚠", f"관절 추종 오차 정지 (보낸 목표 − 엔코더가 기준을 넘은 채 이어짐): {r}")
+        elif "버스 전압" in g:
+            self.add("⚠", f"버스 전압이 낮아 GUI가 멈춤: {g}. RL 절차서: 토크 한계가 낮은 정책으로 내림 (12 → 9 → 6).")
         elif r.startswith("driver errors"):
             self.add("⚠", f"드라이버 문제로 멈춤: {r}")
         elif "late" in r:
@@ -707,7 +749,8 @@ class Analysis:
         if not self.has_npz or self.pol.sum() < 5:
             return
         m = self.pol.copy()
-        m[self.k0] = False                     # 첫 주기는 직전 목표가 서기 자세
+        for k0, _ in self.pol_segs:            # 구간마다 첫 주기는 직전 목표가 서기 자세
+            m[k0] = False
         out = []
         rows = []
         for j in range(12):
@@ -728,32 +771,46 @@ class Analysis:
                            if self.clamped is not None else []))
             if math.isfinite(margin) and margin < 3.0:
                 self.add("⚠", f"{self.short[j]}가 MJCF 관절 범위 끝 {margin:.1f}° 안까지 감 (기구 끝·영점 확인).")
-            if pct(ae, 99) > SIM_ERR_P99_DEG or amax(ae) > SIM_ERR_MAX_DEG or run12 > 2 * SIM_ERR12_RUN_S:
-                self.add("⚠", f"{self.short[j]} 추종 오차가 시뮬보다 큼: p99 {pct(ae, 99):.0f}° (시뮬 23°), 최대 {amax(ae):.0f}° "
-                              f"(50°), 12° 초과 최장 {run12:.2f} s (0.26 s).")
+            sp99, smax, srun = self.sim_err
+            if pct(ae, 99) > sp99 or amax(ae) > smax or run12 > 2 * srun:
+                self.add("⚠", f"{self.short[j]} 추종 오차가 시뮬보다 큼: p99 {pct(ae, 99):.0f}° (시뮬 {sp99:g}°), 최대 "
+                              f"{amax(ae):.0f}° ({smax:g}°), 12° 초과 최장 {run12:.2f} s ({srun:g} s).")
             if satrun > SAT_RUN_S:
                 self.add("⚠", f"{self.short[j]}가 학습 한계 {self.train_limit[j]:g} N·m 이상을 {satrun:.2f} s 연속 냄 "
                               "(S3 중단 기준 1 s).")
             if sat.mean() > 0.05:
                 self.add("⚠", f"{self.short[j]} 토크가 학습 한계 {self.train_limit[j]:g} N·m를 넘은 시간 {100 * sat.mean():.0f} % "
-                              f"(최대 {amax(np.abs(self.tau[m, j])):.1f} N·m; 학습 때는 6에서 잘림).")
+                              f"(최대 {amax(np.abs(self.tau[m, j])):.1f} N·m; 학습 때는 {self.train_limit[j]:g}에서 잘림"
+                              + (", 정책 주기마다 한 번" if self.clamp_nm else "") + ").")
             if qdm > SIM_QD_MAX:
                 self.add("⚠" if qdm > 0.8 * OVERSPEED_QD else "ℹ",
                          f"{self.short[j]} 관절 속도 최대 {qdm:.1f} rad/s (시뮬 보행 최대 11, 드라이버 과속 오류 25).")
-        out.append("정책 중 (첫 주기 제외). 오차 = 직전 목표 − 지금 실제 (deg), τ = 드라이버 PD 토크 추정 (N·m, 드라이버 "
-                   f"전류 한계 {self.drive_current:g} A로 자름; 학습 한계는 6 N·m). 시뮬 보행: 오차 p99 23°, 최대 약 50°, "
-                   "12° 초과 최장 0.26 s, 관절 속도 최대 11 rad/s.\n")
+        sp99, smax, srun = self.sim_err
+        out.append(f"정책 {self.policy_name}, 정책 중 (첫 주기 제외). 오차 = 직전 목표 − 지금 실제 (deg), τ = 드라이버 PD 토크 "
+                   f"추정 (N·m, 드라이버 전류 한계 {self.drive_current:g} A로 자름; 학습 한계는 {self.lim_txt}). 시뮬 보행: 오차 "
+                   f"p99 {sp99:g}°, 최대 약 {smax:g}°, 12° 초과 최장 {srun:g} s, 관절 속도 최대 11 rad/s.\n")
         clamp_cols = ["목표 잘림 %", "잘린 양 최대°"] if self.clamped is not None else []
         if self.clamped is not None:
-            out.append("목표 자르기 기록이 있어 오차·τ는 드라이버로 보낸(자른) 목표로 계산. '6 N·m 넘음'은 자른 뒤에도 주기 사이에 "
-                       "남은 초과 (20 ms 사이 관절이 움직여서). 잘린 양 = 정책 목표 − 보낸 목표.\n")
+            out.append(f"목표 자르기 기록이 있어 오차·τ는 드라이버로 보낸(자른) 목표로 계산. '{self.lim_txt} 넘음'은 자른 뒤에도 "
+                       "주기 사이에 남은 초과 (20 ms 사이 관절이 움직여서). 잘린 양 = 정책 목표 − 보낸 목표.\n")
+            if self.stop_track is not None and self.target_sent is not None:
+                # Radxa의 추종 오차 정지와 같은 값: 같은 주기의 |보낸 목표 − 읽은 각도|
+                same = np.abs(np.degrees(self.target_drive[self.pol] - self.q[self.pol]))
+                lim_d, lim_s = self.stop_track
+                runs = [longest_run(same[:, j] > lim_d) * self.dt for j in range(12)]
+                jw = int(np.argmax(same.max(axis=0)))
+                self.summary["same_cycle_track_err_max_deg"] = round(float(same.max()), 2)
+                lvl = "⚠" if max(runs) >= 0.5 * lim_s else ("ℹ" if same.max() > 0.6 * lim_d else "✓")
+                self.add(lvl, f"추종 오차 정지 기준({lim_d:g}°·{lim_s:g} s, 같은 주기 |보낸 목표 − 엔코더|): 최대 "
+                              f"{same.max():.1f}° ({self.short[jw]}), {lim_d:g}° 넘은 최장 {max(runs):.2f} s.")
             cm = self.clamped[m].mean(axis=0)
             self.summary["clamped_frac"] = [round(float(x), 4) for x in cm]
             top = [j for j in np.argsort(-cm)[:4] if cm[j] > 0.01]
             if top:
                 self.add("ℹ", "Radxa가 목표를 자른 비율 (정책 중): " + ", ".join(f"{self.short[j]} {100 * cm[j]:.0f} %" for j in top))
         out.append(table(["관절", "범위°", "MJCF 끝까지 여유°", "|오차| p95", "p99", "최대", "12° 초과 최장 s", "|τ| p95",
-                          "6 N·m 넘음 %", "6 N·m 넘음 최장 s", "|q̇| 최대 rad/s", "정체 응답"] + clamp_cols, rows))
+                          f"{self.lim_txt} 넘음 %", f"{self.lim_txt} 넘음 최장 s", "|q̇| 최대 rad/s", "정체 응답"] + clamp_cols,
+                         rows))
         # 속도 추정 점검: ODrive vel_estimate vs 위치 차분
         qdiff = np.gradient(self.q, self.t, axis=0)
         cs = []
@@ -815,22 +872,30 @@ class Analysis:
                    f"{np.round(self.gyro[k0], 3).tolist()}, 관절 − 서기 최대 {np.degrees(np.abs(self.obs[k0, 9:21]).max()):.1f}°, "
                    f"명령 {np.round(self.command[k0], 2).tolist()}\n")
         out.append("첫 목표 − 서기 자세 (deg): " + ", ".join(f"{s} {v:+.1f}" for s, v in zip(self.short, dev)) + "\n")
-        if np.abs(dev).max() > FIRST_STEP_DEG:
+        # 이상적 관측(명령 0, 똑바로, 정지)에서의 첫 목표: policy.yaml reference_first_action (real_clamp*), 없으면 4°
+        ref = self.y.get("reference_first_action")
+        ref_deg = (float(np.degrees(0.25 * np.abs(np.clip(np.array(ref, dtype=float), -20, 20))).max())
+                   if isinstance(ref, list) and len(ref) == 12 else None)
+        first_lim = (ref_deg + 4.0) if ref_deg is not None else FIRST_STEP_DEG
+        if np.abs(dev).max() > first_lim:
             self.add("ℹ", f"정책 첫 목표가 서기 자세에서 최대 {np.abs(dev).max():.1f}° ({self.short[int(np.argmax(np.abs(dev)))]}). "
-                          "오프라인 점검(이상적 관측)에서는 4° 안.")
-        # 행동 통계·떨림
+                          + (f"이상적 관측의 기준 첫 목표는 최대 {ref_deg:.1f}°." if ref_deg is not None
+                             else "오프라인 점검(이상적 관측)에서는 4° 안."))
+        # 행동 통계·떨림 (주파수는 가장 긴 정책 구간 하나로: 구간을 이어 붙이면 이음매가 주파수에 섞임)
         a = self.action[P]
         tgt = np.degrees(self.target[P])
         fs = 1.0 / self.dt
         rows = []
         n = idx.size
         dom, hf = [math.nan] * 12, [math.nan] * 12
-        if n >= 100:
-            w = np.hanning(n)
-            freqs = np.fft.rfftfreq(n, self.dt)
+        lk0, lk1 = max(self.pol_segs, key=lambda s: s[1] - s[0])
+        tgt_l = np.degrees(self.target[lk0:lk1])
+        if lk1 - lk0 >= 100:
+            w = np.hanning(lk1 - lk0)
+            freqs = np.fft.rfftfreq(lk1 - lk0, self.dt)
             self.spec = (freqs, [])
             for j in range(12):
-                x = tgt[:, j] - tgt[:, j].mean()
+                x = tgt_l[:, j] - tgt_l[:, j].mean()
                 p = np.abs(np.fft.rfft(x * w)) ** 2
                 self.spec[1].append(p)
                 band = (freqs >= 0.3) & (freqs <= 5.0)
@@ -852,7 +917,7 @@ class Analysis:
         if clip > 0.01:
             self.add("⚠", f"정책 행동이 ±20 한계에 잘린 비율 {100 * clip:.1f} % (관측이 학습 범위를 벗어났을 수 있음).")
         # 떨림: 8 Hz 위 성분의 진폭(rms, deg)이 크고 비율도 클 때만 (보행 움직임이 작은 hip roll이 비율만으로 걸리지 않게)
-        hf_amp = [math.sqrt(h) * float(np.std(tgt[:, j])) if math.isfinite(h) else math.nan for j, h in enumerate(hf)]
+        hf_amp = [math.sqrt(h) * float(np.std(tgt_l[:, j])) if math.isfinite(h) else math.nan for j, h in enumerate(hf)]
         bad = [j for j in range(12) if math.isfinite(hf[j]) and hf[j] > 0.3 and hf_amp[j] > 1.5]
         if bad:
             self.add("⚠", "고주파 떨림 (목표의 8 Hz 위 성분): " + ", ".join(f"{self.short[j]} {hf_amp[j]:.1f}° rms" for j in bad)
@@ -860,19 +925,33 @@ class Analysis:
         self.summary["target_hf_rms_deg"] = [round(x, 2) if math.isfinite(x) else None for x in hf_amp]
         if math.isfinite(dom[2]):
             self.summary["gait_hz_left_hip_pitch"] = dom[2]
-        # 명령 구간
-        segs, i = [], 0
-        cmd = self.command[P]
-        while i < n:
-            j = i
-            while j + 1 < n and np.array_equal(cmd[j + 1], cmd[i]):
-                j += 1
-            kk = idx[i:j + 1]
-            segs.append([f"{self.t[kk[0]]:.1f}~{self.t[kk[-1]] + self.dt:.1f}", f((kk.size) * self.dt, 1),
-                         " ".join(f(v, 2) for v in cmd[i]), f(float(np.mean(self.gyro[kk, 2])), 3),
-                         f(float(np.mean(self.tilt[kk])), 1), f(amax(self.tilt[kk]), 1),
-                         f(float(np.mean(self.lean_fwd[kk])), 1), f(float(np.mean(self.lean_right[kk])), 1)])
-            i = j + 1
+        # 정책 구간 (정책 켜기 → 서기 버튼·멈춤)
+        prow = []
+        for si, (k0, k1) in enumerate(self.pol_segs):
+            nxt = self.ph[k1] if k1 < self.N else None
+            end = "서기 버튼" if nxt == 0 else ("유지" if nxt == 1 else f"기록 끝 ({self.reason})")
+            body = slice(min(k0 + 25, k1 - 1), k1)
+            prow.append([si + 1, f"{self.t[k0]:.1f}", f((k1 - k0) * self.dt, 1), " ".join(f(v, 2) for v in self.command[k0]),
+                         f(float(self.lean_fwd[k0]), 1), f(float(np.mean(self.lean_fwd[body])), 1), f(amax(self.tilt[k0:k1]), 1),
+                         f(float(np.degrees(np.abs(self.target[k0] - self.stand)).max()), 1), end])
+        out.append(f"\n정책 구간 {len(self.pol_segs)}개 (주파수 분석은 가장 긴 구간 {self.t[lk0]:.1f}~{self.t[lk1 - 1] + self.dt:.1f} s)\n")
+        out.append(table(["#", "시작 t s", "길이 s", "명령", "켤 때 앞 숙임°", "앞 숙임 평균° (0.5 s 뒤)", "최대 기울기°",
+                          "첫 목표−서기 최대°", "끝"], prow))
+        self.summary["policy_segments"] = len(self.pol_segs)
+        # 명령 구간 (정책 구간 안에서만 이어 붙임)
+        segs = []
+        for k0, k1 in self.pol_segs:
+            i = k0
+            while i < k1:
+                j = i
+                while j + 1 < k1 and np.array_equal(self.command[j + 1], self.command[i]):
+                    j += 1
+                kk = np.arange(i, j + 1)
+                segs.append([f"{self.t[kk[0]]:.1f}~{self.t[kk[-1]] + self.dt:.1f}", f((kk.size) * self.dt, 1),
+                             " ".join(f(v, 2) for v in self.command[i]), f(float(np.mean(self.gyro[kk, 2])), 3),
+                             f(float(np.mean(self.tilt[kk])), 1), f(amax(self.tilt[kk]), 1),
+                             f(float(np.mean(self.lean_fwd[kk])), 1), f(float(np.mean(self.lean_right[kk])), 1)])
+                i = j + 1
         out.append("\n명령 구간 (속도 측정이 없어 vx는 영상으로 확인; 회전은 자이로 z로 비교 가능, 시뮬 0.8 → 0.85 rad/s)\n")
         out.append(table(["t s", "길이 s", "명령 vx vy wz", "자이로 z 평균 rad/s", "기울기 평균°", "최대°", "앞 숙임 평균°",
                           "오른쪽 기울기 평균°"], segs))
@@ -970,13 +1049,17 @@ class Analysis:
                 if amax(np.abs(iset[sel])) > 1.1 * lim:
                     over_iq.append(f"{self.short[j]} {amax(np.abs(iset[sel])):.1f} A")
             if over_iq:
-                self.add("⚠", "Iq 명령이 학습 한계 6 N·m에 해당하는 전류(6512 5.97 A, 발목 4.79 A)를 넘음: " + ", ".join(over_iq)
-                         + f". 드라이버 전류 한계는 {self.drive_current:g} A 그대로 (ODrive 0.5.1의 CAN 0x00F는 속도 한계만 바꿈).")
-            out.append("\nIq (정책 중 표본; 없으면 기록 전체). 6 N·m 전류 = 학습 토크 한계에 해당하는 전류, '넘음 %' = |Iq 명령|이 그 95 % "
-                       "이상인 표본. τ(Iq) = 방향 × torque_sign × Iq × kt × 15 를 드라이버 PD 추정 τ와 비교 (기울기 ≈ 1, 상관 ≈ 1이면 "
-                       "PD 모델이 맞음)\n")
-            out.append(table(["관절", "node", "표본 Hz", "|Iq| p95 A", "|Iq| 최대", "|Iq 명령| 최대", "6 N·m 전류 A", "넘음 %",
-                              "τ(Iq)/τ(PD) 기울기", "상관"], rows))
+                cl6512 = float(self.train_limit[0]) / 15.0 / KT["6512"]
+                cl5010 = float(self.train_limit[4]) / 15.0 / KT["5010"]
+                self.add("⚠", f"Iq 명령이 학습 한계 {self.lim_txt}에 해당하는 전류(6512 {cl6512:.2f} A, 발목 {cl5010:.2f} A)를 넘음: "
+                         + ", ".join(over_iq)
+                         + f". 드라이버 전류 한계는 {self.drive_current:g} A 그대로 (ODrive 0.5.1의 CAN 0x00F는 속도 한계만 바꿈)"
+                         + ("; 목표 자르기는 정책 주기마다 한 번이라 주기 사이에는 넘을 수 있음 (학습도 같음)." if self.clamp_nm else "."))
+            out.append(f"\nIq (정책 중 표본; 없으면 기록 전체). {self.lim_txt} 전류 = 학습 토크 한계에 해당하는 전류, '넘음 %' = "
+                       "|Iq 명령|이 그 95 % 이상인 표본. τ(Iq) = 방향 × torque_sign × Iq × kt × 15 를 드라이버 PD 추정 τ와 비교 "
+                       "(기울기 ≈ 1, 상관 ≈ 1이면 PD 모델이 맞음)\n")
+            out.append(table(["관절", "node", "표본 Hz", "|Iq| p95 A", "|Iq| 최대", "|Iq 명령| 최대", f"{self.lim_txt} 전류 A",
+                              "넘음 %", "τ(Iq)/τ(PD) 기울기", "상관"], rows))
             self.iq = iq
         vb = fr.get("vbus")
         if vb is not None and vb.size:
@@ -1090,7 +1173,7 @@ class Analysis:
         ax[0].plot(t, self.lean_fwd, "C0", lw=0.8, label="앞 숙임")
         ax[0].plot(t, self.lean_right, "C3", lw=0.8, label="오른쪽 기울기")
         ax[0].axhline(S3_TILT_DEG, color="orange", ls=":", lw=0.8)
-        ax[0].axhline(STOP_TILT_DEG, color="red", ls=":", lw=0.8)
+        ax[0].axhline(self.stop_tilt, color="red", ls=":", lw=0.8)
         ax[0].set_ylabel("deg")
         ax[0].legend(loc="upper left", ncol=3)
         shade(ax[1])
@@ -1266,7 +1349,7 @@ def one_line(d):
 
 
 def fetch(d):
-    m = re.search(r"policy_walk_(\d{8}_\d{6})", d.name)
+    m = re.search(r"policy_walk_(\d{8}_\d{6}(?:_[A-Za-z0-9_\-]+)?)$", d.name)   # 11-25부터 _<정책>_<한계>Nm 붙음
     if not m or (d / "real_walk.npz").exists():
         return None
     remote = f"radxa:~/motor_bridge/logs/real_walk_{m.group(1)}.npz"
@@ -1281,7 +1364,8 @@ def main():
     ap.add_argument("--list", action="store_true", help="기록 목록과 한 줄 요약만")
     ap.add_argument("--all", action="store_true", help="모든 기록 분석")
     ap.add_argument("--fetch", action="store_true", help="real_walk.npz가 없으면 Radxa에서 scp로 가져옴")
-    ap.add_argument("--policy-dir", default=str(POLICY_DIR))
+    ap.add_argument("--policy-dir", default=None,
+                    help="정책 폴더 (없으면 기록의 meta.json policy_name, 그것도 없으면 radxa/policies/real_walk)")
     ap.add_argument("--drive-current-a", type=float, default=None,
                     help="드라이버 current_lim [A] (토크 추정을 자르는 값; 없으면 meta.json drive_current_lim_A, 그것도 없으면 18)")
     a = ap.parse_args()
